@@ -84,3 +84,26 @@ class PaymentService:
         if not signature:
             return False
         return signature == self._payfast_signature(payload, current_app.config.get("PAYFAST_PASSPHRASE"))
+
+    def validate_payfast_payment(self, invoice: BillingInvoice, payload: dict) -> tuple[bool, str | None]:
+        """Validate the PayFast payload before activating a subscription.
+
+        This checks the signature, invoice reference, payment amount, currency,
+        and status. Network host validation can be added in production behind a
+        stable webhook URL if required by your deployment.
+        """
+        if not self.validate_payfast_payload(payload):
+            return False, "Invalid PayFast signature"
+        if payload.get("m_payment_id") != invoice.reference:
+            return False, "PayFast reference does not match invoice"
+        try:
+            paid_amount = float(payload.get("amount_gross") or payload.get("amount") or 0)
+        except (TypeError, ValueError):
+            return False, "Invalid PayFast amount"
+        if round(paid_amount, 2) != round(float(invoice.amount), 2):
+            return False, "PayFast amount does not match invoice"
+        if invoice.currency != "ZAR":
+            return False, "PayFast only supports ZAR invoices in this app"
+        if payload.get("payment_status", "").upper() != "COMPLETE":
+            return False, f"PayFast status: {payload.get('payment_status') or 'unknown'}"
+        return True, None

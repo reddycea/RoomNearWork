@@ -25,8 +25,16 @@ def create_invoice(user: User, plan: SubscriptionPlan, provider: str = "manual",
 
 
 def activate_subscription_from_invoice(invoice: BillingInvoice, provider_reference: str | None = None) -> UserSubscription:
+    """Mark an invoice paid and activate the matching subscription exactly once.
+
+    PayFast can send duplicate IPN/webhook messages. Returning the existing
+    subscription keeps the billing flow idempotent and prevents duplicate
+    subscriptions for one invoice.
+    """
     if invoice.plan.role != invoice.user.role:
         raise ValueError("Invoice plan role does not match user role.")
+    if invoice.is_paid and invoice.subscription:
+        return invoice.subscription
     if not invoice.is_paid:
         invoice.mark_paid(provider_reference)
     subscription = subscribe_user(invoice.user, invoice.plan, provider=invoice.provider, reference=invoice.reference)

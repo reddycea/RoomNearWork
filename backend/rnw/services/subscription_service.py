@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+from flask import current_app
+
 from ..extensions import db
 from ..models import Property, SubscriptionPlan, User, UserSubscription
 from ..models.subscription import default_end_date
@@ -10,35 +12,75 @@ TENANT_MONTHLY_PRICE = 50.0
 LANDLORD_MONTHLY_PRICE = 100.0
 DEFAULT_CURRENCY = "ZAR"
 
-DEFAULT_PLANS = [
-    {
-        "name": "Tenant Plus",
-        "role": "tenant",
-        "price": TENANT_MONTHLY_PRICE,
-        "currency": DEFAULT_CURRENCY,
-        "billing_period": "monthly",
-        "max_listings": 0,
-        "is_featured": False,
-        "support_level": "Standard",
-        "features": "Apply for rentals; Save unlimited properties; AI recommendations; Application history; Application status tracker",
-    },
-    {
-        "name": "Landlord Pro",
-        "role": "landlord",
-        "price": LANDLORD_MONTHLY_PRICE,
-        "currency": DEFAULT_CURRENCY,
-        "billing_period": "monthly",
-        "max_listings": 25,
-        "is_featured": True,
-        "support_level": "Priority",
-        "features": "Create up to 25 active listings; Receive tenant applications; Featured visibility; Verification-ready landlord profile; Landlord analytics",
-    },
-]
+
+def _configured_price(name: str, fallback: float) -> float:
+    try:
+        return float(current_app.config.get(name, fallback))
+    except RuntimeError:
+        return fallback
+
+
+def _configured_int(name: str, fallback: int) -> int:
+    try:
+        return int(current_app.config.get(name, fallback))
+    except RuntimeError:
+        return fallback
+
+
+def _configured_currency() -> str:
+    try:
+        return str(current_app.config.get("SUBSCRIPTION_CURRENCY", DEFAULT_CURRENCY)).upper()
+    except RuntimeError:
+        return DEFAULT_CURRENCY
+
+
+def default_plans() -> list[dict]:
+    """Return plan definitions using environment-configurable prices.
+
+    Edit these values through `.env` instead of editing Python code:
+
+    - TENANT_MONTHLY_PRICE=50
+    - LANDLORD_MONTHLY_PRICE=100
+    - LANDLORD_MAX_LISTINGS=25
+    - SUBSCRIPTION_CURRENCY=ZAR
+    """
+    tenant_price = _configured_price("TENANT_MONTHLY_PRICE", TENANT_MONTHLY_PRICE)
+    landlord_price = _configured_price("LANDLORD_MONTHLY_PRICE", LANDLORD_MONTHLY_PRICE)
+    landlord_max_listings = _configured_int("LANDLORD_MAX_LISTINGS", 25)
+    currency = _configured_currency()
+    return [
+        {
+            "name": "Tenant Plus",
+            "role": "tenant",
+            "price": tenant_price,
+            "currency": currency,
+            "billing_period": "monthly",
+            "max_listings": 0,
+            "is_featured": False,
+            "support_level": "Standard",
+            "features": "Apply for rentals; Save unlimited properties; AI recommendations; Application history; Application status tracker",
+        },
+        {
+            "name": "Landlord Pro",
+            "role": "landlord",
+            "price": landlord_price,
+            "currency": currency,
+            "billing_period": "monthly",
+            "max_listings": landlord_max_listings,
+            "is_featured": True,
+            "support_level": "Priority",
+            "features": f"Create up to {landlord_max_listings} active listings; Receive tenant applications; Featured visibility; Verification-ready landlord profile; Landlord analytics",
+        },
+    ]
+
+
+# Backwards-compatible constant for tests/imports; ensure_default_plans() uses default_plans().
+DEFAULT_PLANS = default_plans
 
 
 def ensure_default_plans() -> None:
     """Create or update the official RNW monthly tenant/landlord plans."""
-    for item in DEFAULT_PLANS:
+    for item in default_plans():
         plan = SubscriptionPlan.query.filter_by(name=item["name"]).first()
         if not plan:
             plan = SubscriptionPlan(name=item["name"])
@@ -63,11 +105,7 @@ def get_default_plan_for_role(role: str) -> SubscriptionPlan | None:
 
 
 def subscribe_user(user: User, plan: SubscriptionPlan, provider: str = "manual", reference: str | None = None, months: int = 1) -> UserSubscription:
-    """Activate a monthly subscription for a tenant or landlord.
-
-    Existing active subscriptions for the same user role are expired so the user
-    has exactly one active plan for their account type.
-    """
+    """Activate a subscription and expire older active plans for the same role."""
     if plan.role != user.role:
         raise ValueError(f"{plan.name} is a {plan.role} plan and cannot be assigned to a {user.role} account.")
 

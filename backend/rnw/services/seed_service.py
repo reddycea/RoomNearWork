@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from ..extensions import db
-from ..models import Property, User
+from ..models import Property, PropertyReview, RentalApplication, SupportTicket, User
 from .subscription_service import ensure_default_plans, get_default_plan_for_role, subscribe_user
 
 
@@ -106,5 +106,45 @@ def seed_database() -> None:
             ),
         ]
         db.session.add_all(demo_properties)
+
+
+    db.session.flush()
+    first_property = Property.query.order_by(Property.id.asc()).first()
+    if first_property and not RentalApplication.query.filter_by(property_id=first_property.id, applicant_id=tenant.id).first():
+        db.session.add(RentalApplication(
+            property_id=first_property.id,
+            applicant_id=tenant.id,
+            status="approved",
+            message="I work near Empangeni CBD and need a safe room.",
+            monthly_income=12500,
+            employment_status="employed",
+            employer_name="Demo Employer",
+            years_employed=2,
+            number_of_occupants=1,
+            lease_term=12,
+        ))
+        db.session.flush()
+    application = RentalApplication.query.filter_by(property_id=first_property.id, applicant_id=tenant.id).first() if first_property else None
+    if first_property and application and not PropertyReview.query.filter_by(property_id=first_property.id, reviewer_id=tenant.id).first():
+        db.session.add(PropertyReview(
+            property_id=first_property.id,
+            reviewer_id=tenant.id,
+            landlord_id=landlord.id,
+            rental_application_id=application.id,
+            rating=5,
+            title="Great location for work",
+            comment="The room is close to transport and the listing details were accurate.",
+            status="approved",
+        ))
+    if not SupportTicket.query.first():
+        db.session.add(SupportTicket(
+            user_id=tenant.id,
+            name=tenant.full_name,
+            email=tenant.email,
+            category="billing",
+            subject="Demo payment question",
+            message="I want to confirm my Tenant Plus subscription.",
+            priority="high",
+        ))
 
     db.session.commit()
