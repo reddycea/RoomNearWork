@@ -1,0 +1,5 @@
+{% extends 'base.html' %}
+{% block title %}Support ticket #{{ ticket.id }} — RNW{% endblock %}
+{% block content %}<section class="panel"><p class="eyebrow">Support</p><h1>Ticket #{{ ticket.id }}: {{ ticket.subject }}</h1>
+<p><strong>Status:</strong> {{ ticket.status }} · <strong>Category:</strong> {{ ticket.category }} · <strong>Priority:</strong> {{ ticket.priority }}</p>
+<p>{{ ticket.message }}</p>{% if ticket.admin_response %}<hr><h2>RNW response</h2><p>{{ ticket.admin_response }}</p>{% endif %}</section>{% endblock %}
