@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}RNW — Rooms Near Work{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">Rental marketplace SaaS</p>
+    <h1>Find rentals close to work, transport, and opportunity.</h1>
+    <p>RNW helps tenants discover affordable rooms and apartments while giving landlords a safer, verified listing platform.</p>
+    <form class="search" action="{{ url_for('properties.list_properties') }}">
+      <input name="workplace" placeholder="Workplace or city, e.g. Empangeni">
+      <input name="max_price" type="number" placeholder="Max rent">
+      <select name="sort"><option value="nearest">Nearest</option><option value="cheapest">Cheapest</option><option value="newest">Newest</option></select>
+      <button>Search</button>
+    </form>
+  </div>
+</section>
+
+<section class="stats">
+  <div><strong>{{ stats.approved_properties }}</strong><span>approved listings</span></div>
+  <div><strong>{{ stats.cities }}</strong><span>cities covered</span></div>
+  <div><strong>R50</strong><span>tenant subscription pm</span></div>
+  <div><strong>R100</strong><span>landlord subscription pm</span></div>
+</section>
+
+<section class="panel split">
+  <div>
+    <p class="eyebrow">RNW subscriptions</p>
+    <h2>Tenant Plus and Landlord Pro</h2>
+    <p class="muted">Tenants unlock applications, saved listings, and AI recommendations for R50pm. Landlords unlock up to 25 active listings, applications, verification, and analytics for R100pm.</p>
+  </div>
+  {% if current_user.is_authenticated and current_user.role in ['tenant','landlord'] %}<a class="button" href="{{ url_for('billing.plans') }}">View plans</a>{% endif %}
+</section>
+
+<h2>Featured listings</h2>
+<div class="grid cards">
+  {% for property in featured %}
+    {% include 'partials/property_card.html' %}
+  {% else %}
+    <p>No listings yet. Seed the database to load demo listings.</p>
+  {% endfor %}
+</div>
+{% endblock %}
