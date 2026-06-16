@@ -103,3 +103,42 @@ docker compose up --build
 - Configure Redis for cache and rate limiting
 - Store uploads in private object storage for large deployments
 - Schedule `scripts/backup_db.sh`
+
+
+## Real Launch Additions
+
+This ZIP includes the production-readiness layer for RNW:
+
+- Legal pages: Terms, Privacy, Refunds, POPIA, Safety Rules
+- Support ticket system for public/authenticated users
+- Listing reporting and admin moderation
+- Property reviews with admin approval and landlord responses
+- Payment webhook logs for PayFast IPN auditing
+- Storage abstraction for local, Cloudinary, S3, or DigitalOcean Spaces
+- Legal consent records captured during registration
+- Admin dashboards for reviews, reports, support, billing, and webhook logs
+
+Before launch, replace the legal templates with lawyer-reviewed policies, configure real SMTP, configure PayFast production credentials, connect a domain, and move uploads to object storage.
+
+## Merged package improvements
+
+This merged version also adds environment-configurable subscription prices:
+
+```env
+TENANT_MONTHLY_PRICE=50
+LANDLORD_MONTHLY_PRICE=100
+LANDLORD_MAX_LISTINGS=25
+SUBSCRIPTION_CURRENCY=ZAR
+```
+
+After changing those values, run:
+
+```bash
+flask --app backend.app:create_app ensure-plans
+```
+
+You can also update plan prices directly:
+
+```bash
+flask --app backend.app:create_app set-plan-prices --tenant 75 --landlord 150 --landlord-listings 50
+```
