@@ -41,6 +41,8 @@ class Property(TimestampMixin, db.Model):
     saved_by = db.relationship("SavedProperty", back_populates="property", cascade="all, delete-orphan")
     inquiries = db.relationship("Inquiry", back_populates="property", cascade="all, delete-orphan")
     applications = db.relationship("RentalApplication", back_populates="property", cascade="all, delete-orphan")
+    reviews = db.relationship("PropertyReview", back_populates="property", cascade="all, delete-orphan", order_by="PropertyReview.created_at.desc()")
+    reports = db.relationship("ListingReport", back_populates="property", cascade="all, delete-orphan")
 
     @property
     def primary_photo(self) -> str | None:
@@ -49,8 +51,12 @@ class Property(TimestampMixin, db.Model):
 
     @property
     def average_rating(self) -> float:
-        ratings = [app.rating for app in self.applications if app.rating]
+        ratings = [review.rating for review in self.reviews if review.status == "approved"]
         return round(sum(ratings) / len(ratings), 2) if ratings else 0.0
+
+    @property
+    def approved_review_count(self) -> int:
+        return len([review for review in self.reviews if review.status == "approved"])
 
     @property
     def is_featured(self) -> bool:
@@ -87,6 +93,7 @@ class Property(TimestampMixin, db.Model):
             "view_count": self.view_count,
             "primary_photo": self.primary_photo,
             "average_rating": self.average_rating,
+            "approved_review_count": self.approved_review_count,
         }
         if include_landlord and self.landlord:
             payload["landlord"] = self.landlord.to_dict()
