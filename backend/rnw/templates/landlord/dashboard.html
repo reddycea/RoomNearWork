@@ -1,1 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Landlord dashboard — RNW{% endblock %}
+{% block content %}
+<div class="split">
+  <div>
+    <h1>Landlord dashboard</h1>
+    {% if current_user.active_subscription %}<p class="muted">{{ current_user.active_subscription.plan.name }} · {{ current_user.active_subscription.plan.price_label() }}</p>{% endif %}
+  </div>
+  <a class="button" href="{{ url_for('properties.create') }}">New listing</a>
+</div>
+<div class="stats">
+  <div><strong>{{ stats.listing_count }}</strong><span>active listings{% if stats.listing_limit is not none %} / {{ stats.listing_limit }} limit{% endif %}</span></div>
+  <div><strong>{{ stats.pending_applications }}</strong><span>pending applications</span></div>
+  <div><strong>{{ stats.views }}</strong><span>total views</span></div>
+</div>
+{% if not stats.can_create_listing %}<div class="flash warning">You have reached your active listing limit. Upgrade limits in the plan definition or archive old listings.</div>{% endif %}
 
+<h2>Your properties</h2>
+<table>
+  <tr><th>Title</th><th>Status</th><th>Rent</th><th>Views</th><th>Actions</th></tr>
+  {% for property in properties %}
+    <tr><td>{{ property.title }}</td><td>{{ property.status }}</td><td>R{{ '%.0f'|format(property.price) }}</td><td>{{ property.view_count }}</td><td><a href="{{ url_for('properties.edit', property_id=property.id) }}">Edit</a></td></tr>
+  {% else %}<tr><td colspan="5">No properties yet.</td></tr>{% endfor %}
+</table>
+
+<h2>Recent applications</h2>
+<table>
+  <tr><th>Property</th><th>Tenant</th><th>Status</th></tr>
+  {% for application in applications %}
+    <tr><td>{{ application.property.title }}</td><td>{{ application.applicant.full_name }}</td><td>{{ application.status }}</td></tr>
+  {% else %}<tr><td colspan="3">No applications yet.</td></tr>{% endfor %}
+</table>
+{% endblock %}

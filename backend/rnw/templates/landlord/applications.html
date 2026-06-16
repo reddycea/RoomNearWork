@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Applications — RNW{% endblock %}
+{% block content %}
+<h1>Applications</h1>
+<table>
+  <tr><th>Applicant</th><th>Property</th><th>Status</th><th>Actions</th></tr>
+  {% for app in applications %}
+  <tr>
+    <td>{{ app.applicant.full_name }}</td><td>{{ app.property.title }}</td><td>{{ app.status }}</td>
+    <td>
+      {% if app.status == 'pending' %}
+      <form class="inline-form" method="post" action="{{ url_for('landlord.process_application', application_id=app.id, action='approve') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Approve</button></form>
+      <form class="inline-form" method="post" action="{{ url_for('landlord.process_application', application_id=app.id, action='reject') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Reject</button></form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
