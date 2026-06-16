@@ -10,12 +10,14 @@
   <nav class="nav">
     <a class="brand" href="{{ url_for('main.index') }}">RNW</a>
     <a href="{{ url_for('properties.list_properties') }}">Browse</a>
+    <a href="{{ url_for('billing.plans') if current_user.is_authenticated else url_for('auth.register') }}">Pricing</a>
+    <a href="{{ url_for('trust.support') }}">Support</a>
     {% if current_user.is_authenticated %}
       {% if current_user.role == 'tenant' %}<a href="{{ url_for('tenant.dashboard') }}">Tenant</a>{% endif %}
       {% if current_user.role == 'landlord' %}<a href="{{ url_for('landlord.dashboard') }}">Landlord</a>{% endif %}
       {% if current_user.role == 'admin' %}<a href="{{ url_for('admin.dashboard') }}">Admin</a>{% endif %}
       {% if current_user.role in ['tenant', 'landlord'] %}<a href="{{ url_for('billing.dashboard') }}">Billing</a>{% endif %}
-      {% if current_user.role == 'admin' %}<a href="{{ url_for('admin.billing') }}">Admin Billing</a>{% endif %}
+      {% if current_user.role == 'admin' %}<a href="{{ url_for('admin.billing') }}">Admin Billing</a><a href="{{ url_for('admin.reviews') }}">Reviews</a><a href="{{ url_for('admin.reports') }}">Reports</a><a href="{{ url_for('admin.support_tickets') }}">Support Admin</a>{% endif %}
       <a href="{{ url_for('auth.logout') }}">Logout</a>
     {% else %}
       <a href="{{ url_for('auth.login') }}">Login</a>
@@ -35,5 +37,12 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+  <footer class="footer">
+    <a href="{{ url_for('main.terms') }}">Terms</a>
+    <a href="{{ url_for('main.privacy') }}">Privacy</a>
+    <a href="{{ url_for('main.refunds') }}">Refunds</a>
+    <a href="{{ url_for('main.popia') }}">POPIA</a>
+    <a href="{{ url_for('main.safety') }}">Safety</a>
+  </footer>
 </body>
 </html>
