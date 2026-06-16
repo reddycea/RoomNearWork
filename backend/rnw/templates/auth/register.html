@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Create account — RNW{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <h1>Create account</h1>
+  <form method="post" class="grid-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>First name <input name="first_name" required></label>
+    <label>Last name <input name="last_name" required></label>
+    <label>Email <input name="email" type="email" required></label>
+    <label>Phone <input name="phone"></label>
+    <label>Role <select name="role"><option value="tenant">Tenant — R50pm</option><option value="landlord">Landlord — R100pm</option></select></label>
+    <label>Province <select name="province">{% for province in provinces %}<option value="{{ province }}">{{ province }}</option>{% endfor %}</select></label>
+    <label>ID number <input name="id_number" maxlength="13"></label>
+    <label>Password <input name="password" type="password" required></label>
+    <label>Confirm password <input name="confirm_password" type="password" required></label>
+    <p class="wide muted">Use at least 8 characters with uppercase, lowercase, number, and symbol.</p>
+    <button>Create account</button>
+  </form>
+</section>
+{% endblock %}
