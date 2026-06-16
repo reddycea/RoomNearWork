@@ -1,1 +1,34 @@
-
+{% extends 'base.html' %}
+{% block title %}{{ 'Edit' if property else 'New' }} property — RNW{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>{{ 'Edit' if property else 'New' }} property</h1>
+  <form method="post" enctype="multipart/form-data" class="grid-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Title <input name="title" required value="{{ property.title if property else '' }}"></label>
+    <label>Type <select name="property_type">
+      {% for type in ['room','studio','apartment','house','townhouse','commercial'] %}<option value="{{ type }}" {% if property and property.property_type == type %}selected{% endif %}>{{ type }}</option>{% endfor %}
+    </select></label>
+    <label>Address <input name="address" required value="{{ property.address if property else '' }}"></label>
+    <label>City <input name="city" required value="{{ property.city if property else '' }}"></label>
+    <label>Province <select name="province">{% for province in provinces %}<option value="{{ province }}" {% if property and property.province == province %}selected{% endif %}>{{ province }}</option>{% endfor %}</select></label>
+    <label>Postal code <input name="postal_code" value="{{ property.postal_code if property else '' }}"></label>
+    <label>Monthly rent <input name="price" type="number" step="0.01" required value="{{ property.price if property else '' }}"></label>
+    <label>Deposit amount <input name="deposit_amount" type="number" step="0.01" value="{{ property.deposit_amount if property else '' }}"></label>
+    <label>Bedrooms <input name="bedrooms" type="number" value="{{ property.bedrooms if property else 1 }}"></label>
+    <label>Bathrooms <input name="bathrooms" type="number" step="0.5" value="{{ property.bathrooms if property else 1 }}"></label>
+    <label>Parking <input name="parking" type="number" value="{{ property.parking if property else 0 }}"></label>
+    <label>Area sqm <input name="area_sqm" type="number" step="0.1" value="{{ property.area_sqm if property else '' }}"></label>
+    <label>Latitude <input name="latitude" type="number" step="any" value="{{ property.latitude if property else '' }}"></label>
+    <label>Longitude <input name="longitude" type="number" step="any" value="{{ property.longitude if property else '' }}"></label>
+    <label>Available date <input name="available_date" type="date" value="{{ property.available_date if property and property.available_date else '' }}"></label>
+    <label>Minimum lease <input name="minimum_lease" type="number" value="{{ property.minimum_lease if property else 12 }}"></label>
+    <label class="wide">Transport access <input name="transport_access" placeholder="e.g. Taxi rank 500m away, bus stop nearby" value="{{ property.transport_access if property else '' }}"></label>
+    <label class="inline"><input name="furnished" type="checkbox" {% if property and property.furnished %}checked{% endif %}> Furnished</label>
+    <label class="inline"><input name="pets_allowed" type="checkbox" {% if property and property.pets_allowed %}checked{% endif %}> Pets allowed</label>
+    <label class="wide">Description <textarea name="description" required>{{ property.description if property else '' }}</textarea></label>
+    <label class="wide">Photos <input name="photos" type="file" multiple accept="image/*"></label>
+    <button>Save property</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}{{ property.title }} — RNW{% endblock %}
+{% block content %}
+<section class="panel">
+  <p class="eyebrow">{{ property.city }}, {{ property.province }}</p>
+  <h1>{{ property.title }}</h1>
+  <p class="price">R{{ '%.0f'|format(property.price) }} pm</p>
+  <div class="details">
+    <div><dt>Deposit</dt><dd>{% if property.deposit_amount %}R{{ '%.0f'|format(property.deposit_amount) }}{% else %}Not specified{% endif %}</dd></div>
+    <div><dt>Bedrooms</dt><dd>{{ property.bedrooms }}</dd></div>
+    <div><dt>Bathrooms</dt><dd>{{ property.bathrooms }}</dd></div>
+    <div><dt>Parking</dt><dd>{{ property.parking }}</dd></div>
+    <div><dt>Transport</dt><dd>{{ property.transport_access or 'Not specified' }}</dd></div>
+    <div><dt>Furnished</dt><dd>{{ 'Yes' if property.furnished else 'No' }}</dd></div>
+  </div>
+  <p>{{ property.description }}</p>
+  {% if current_user.is_authenticated and current_user.role == 'tenant' %}
+    <form class="inline-form" method="post" action="{{ url_for('tenant.save_property', property_id=property.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Save</button></form>
+    <a class="button" href="{{ url_for('tenant.apply', property_id=property.id) }}">Apply now</a>
+  {% endif %}
+  {% if current_user.is_authenticated and (current_user.id == property.landlord_id or current_user.role == 'admin') %}
+    <a class="button" href="{{ url_for('properties.edit', property_id=property.id) }}">Edit</a>
+  {% endif %}
+</section>
+{% endblock %}
