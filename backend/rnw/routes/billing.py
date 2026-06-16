@@ -3,9 +3,10 @@ from __future__ import annotations
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_login import current_user, login_required
+import json
 
 from ..extensions import csrf, db
-from ..models import BillingInvoice, SubscriptionPlan, User, UserSubscription
+from ..models import BillingInvoice, PaymentWebhookLog, SubscriptionPlan, User, UserSubscription
 from ..services.billing_service import activate_subscription_from_invoice, cancel_subscription, create_invoice
 from ..services.payment_service import PaymentService
 from ..services.subscription_service import ensure_default_plans, get_available_plans
@@ -77,21 +78,23 @@ def disabled():
 def payfast_webhook():
     payload = request.form.to_dict()
     reference = payload.get("m_payment_id")
+    webhook_log = PaymentWebhookLog(provider="payfast", reference=reference, external_id=payload.get("pf_payment_id"), status=payload.get("payment_status"), payload=json.dumps(payload, sort_keys=True))
+    db.session.add(webhook_log)
     invoice = BillingInvoice.query.filter_by(reference=reference).first() if reference else None
     if not invoice:
         return "Invoice not found", 404
 
     payment_service = PaymentService()
-    if not payment_service.validate_payfast_payload(payload):
-        invoice.mark_failed("Invalid PayFast signature")
+    valid_payment, error = payment_service.validate_payfast_payment(invoice, payload)
+    webhook_log.valid_signature = payment_service.validate_payfast_payload(payload)
+    if not valid_payment:
+        invoice.mark_failed(error)
+        webhook_log.error = error
         db.session.commit()
-        return "Invalid signature", 400
+        return error or "Invalid PayFast payload", 400
 
-    status = payload.get("payment_status", "").upper()
-    if status == "COMPLETE":
-        activate_subscription_from_invoice(invoice, payload.get("pf_payment_id"))
-    else:
-        invoice.mark_failed(f"PayFast status: {status or 'unknown'}")
+    activate_subscription_from_invoice(invoice, payload.get("pf_payment_id"))
+    webhook_log.mark_processed()
     db.session.commit()
     return "OK", 200
 

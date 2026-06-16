@@ -28,3 +28,29 @@ def uploaded_file(filename: str):
     Private verification documents are never served by this route.
     """
     return send_from_directory(current_app.config["UPLOAD_FOLDER_PATH"], filename)
+
+
+
+@main_bp.get("/legal/terms")
+def terms():
+    return render_template("legal/terms.html")
+
+
+@main_bp.get("/legal/privacy")
+def privacy():
+    return render_template("legal/privacy.html")
+
+
+@main_bp.get("/legal/refunds")
+def refunds():
+    return render_template("legal/refunds.html")
+
+
+@main_bp.get("/legal/popia")
+def popia():
+    return render_template("legal/popia.html")
+
+
+@main_bp.get("/legal/safety")
+def safety():
+    return render_template("legal/safety.html")

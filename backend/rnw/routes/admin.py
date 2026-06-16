@@ -8,7 +8,7 @@ from flask_login import current_user
 from sqlalchemy import func
 
 from ..extensions import db
-from ..models import BillingInvoice, LandlordVerification, Property, RentalApplication, SubscriptionPlan, User, UserSubscription
+from ..models import BillingInvoice, LandlordVerification, ListingReport, PaymentWebhookLog, Property, PropertyReview, RentalApplication, SubscriptionPlan, SupportTicket, User, UserSubscription
 from ..services.audit_service import log_admin_action
 from ..services.billing_service import cancel_subscription, extend_subscription
 from ..services.subscription_service import get_available_plans, subscribe_user
@@ -31,6 +31,9 @@ def dashboard():
         "pending_properties": Property.query.filter_by(status="pending").count(),
         "approved_properties": Property.query.filter_by(status="approved").count(),
         "pending_applications": RentalApplication.query.filter_by(status="pending").count(),
+        "pending_reviews": PropertyReview.query.filter_by(status="pending").count(),
+        "open_reports": ListingReport.query.filter_by(status="open").count(),
+        "open_support": SupportTicket.query.filter_by(status="open").count(),
     }
     pending_properties = Property.query.filter_by(status="pending").order_by(Property.created_at.desc()).limit(10).all()
     pending_verifications = LandlordVerification.query.filter_by(status="pending").order_by(LandlordVerification.created_at.desc()).limit(10).all()
@@ -180,3 +183,94 @@ def subscription_action(subscription_id: int, action: str):
 def private_file_link(private_url: str | None) -> str | None:
     relative = private_relative_path(private_url)
     return url_for("admin.private_file", relative_path=relative) if relative else None
+
+
+
+@admin_bp.get("/reviews")
+@roles_required("admin")
+def reviews():
+    status = request.args.get("status")
+    query = PropertyReview.query
+    if status:
+        query = query.filter_by(status=status)
+    return render_template("admin/reviews.html", reviews=query.order_by(PropertyReview.created_at.desc()).all())
+
+
+@admin_bp.post("/reviews/<int:review_id>/<action>")
+@roles_required("admin")
+def review_action(review_id: int, action: str):
+    review = db.session.get(PropertyReview, review_id) or abort(404)
+    if action == "approve":
+        review.approve(current_user.id)
+    elif action == "reject":
+        review.reject(request.form.get("rejection_reason"), current_user.id)
+    else:
+        abort(400)
+    log_admin_action(action, "review", review.id)
+    db.session.commit()
+    flash("Review moderated.", "success")
+    return redirect(url_for("admin.reviews"))
+
+
+@admin_bp.get("/reports")
+@roles_required("admin")
+def reports():
+    status = request.args.get("status")
+    query = ListingReport.query
+    if status:
+        query = query.filter_by(status=status)
+    return render_template("admin/reports.html", reports=query.order_by(ListingReport.created_at.desc()).all())
+
+
+@admin_bp.post("/reports/<int:report_id>/<action>")
+@roles_required("admin")
+def report_action(report_id: int, action: str):
+    report = db.session.get(ListingReport, report_id) or abort(404)
+    if action == "investigate":
+        report.status = "investigating"
+        report.admin_notes = request.form.get("admin_notes")
+    elif action in {"resolve", "dismiss"}:
+        report.close("resolved" if action == "resolve" else "dismissed", current_user.id, request.form.get("admin_notes"))
+    else:
+        abort(400)
+    log_admin_action(action, "listing_report", report.id)
+    db.session.commit()
+    flash("Listing report updated.", "success")
+    return redirect(url_for("admin.reports"))
+
+
+@admin_bp.get("/support")
+@roles_required("admin")
+def support_tickets():
+    status = request.args.get("status")
+    query = SupportTicket.query
+    if status:
+        query = query.filter_by(status=status)
+    return render_template("admin/support.html", tickets=query.order_by(SupportTicket.created_at.desc()).all())
+
+
+@admin_bp.route("/support/<int:ticket_id>", methods=["GET", "POST"])
+@roles_required("admin")
+def support_ticket(ticket_id: int):
+    ticket = db.session.get(SupportTicket, ticket_id) or abort(404)
+    if request.method == "POST":
+        response = request.form.get("admin_response", "").strip()
+        status = request.form.get("status", "pending_user")
+        if status not in {"open", "pending_user", "resolved", "closed"}:
+            status = "pending_user"
+        if not response:
+            flash("Write a response before updating the ticket.", "danger")
+        else:
+            ticket.respond(current_user.id, response, status)
+            log_admin_action("respond_support", "support_ticket", ticket.id)
+            db.session.commit()
+            flash("Support ticket updated.", "success")
+            return redirect(url_for("admin.support_tickets"))
+    return render_template("admin/support_detail.html", ticket=ticket)
+
+
+@admin_bp.get("/webhooks")
+@roles_required("admin")
+def webhooks():
+    logs = PaymentWebhookLog.query.order_by(PaymentWebhookLog.created_at.desc()).limit(200).all()
+    return render_template("admin/webhooks.html", logs=logs)

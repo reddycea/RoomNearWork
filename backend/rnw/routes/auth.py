@@ -8,7 +8,7 @@ from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db, limiter
-from ..models import User
+from ..models import LegalConsent, User
 from ..services.auth_service import (
     TOKEN_PURPOSE_EMAIL_VERIFY,
     TOKEN_PURPOSE_PASSWORD_RESET,
@@ -66,6 +66,8 @@ def register():
         db.session.add(user)
         try:
             db.session.flush()
+            db.session.add(LegalConsent(user_id=user.id, email=user.email, consent_type="terms", ip_address=request.remote_addr, user_agent=request.headers.get("User-Agent", "")[:255]))
+            db.session.add(LegalConsent(user_id=user.id, email=user.email, consent_type="privacy", ip_address=request.remote_addr, user_agent=request.headers.get("User-Agent", "")[:255]))
             send_verification_email(user)
             db.session.commit()
         except IntegrityError:
