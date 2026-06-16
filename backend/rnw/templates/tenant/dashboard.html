@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Tenant dashboard — RNW{% endblock %}
+{% block content %}
+<h1>Tenant dashboard</h1>
+
+<section class="panel">
+  <div class="split">
+    <div>
+      <h2>Subscription</h2>
+      {% if current_user.active_subscription %}
+        <p><strong>{{ current_user.active_subscription.plan.name }}</strong> — {{ current_user.active_subscription.plan.price_label() }}</p>
+        <p class="muted">You can apply for rentals, save properties, and use recommendations.</p>
+      {% else %}
+        <p class="muted">Activate Tenant Plus for R50pm to apply for rentals and save properties.</p>
+      {% endif %}
+    </div>
+    <a class="button" href="{{ url_for('billing.dashboard') }}">Manage</a>
+  </div>
+</section>
+
+<h2>Recommended for you</h2>
+<div class="grid cards">
+  {% for item in recommendations %}
+    <article class="card">
+      {% set property = item.property %}
+      {% include 'partials/property_card.html' %}
+      <p class="muted">Score {{ item.score }} · {{ item.reasons|join(', ') }}</p>
+    </article>
+  {% else %}
+    <p>Subscribe to Tenant Plus and search/save listings to unlock better recommendations.</p>
+  {% endfor %}
+</div>
+
+<h2>Your applications</h2>
+<table>
+  <tr><th>Property</th><th>Status</th><th>Applied</th></tr>
+  {% for app in applications %}<tr><td>{{ app.property.title }}</td><td>{{ app.status }}</td><td>{{ app.created_at.date() }}</td></tr>{% else %}<tr><td colspan="3">No applications yet.</td></tr>{% endfor %}
+</table>
+<h2>Saved properties</h2>
+<div class="grid cards">
+  {% for item in saved %}{% set property = item.property %}{% include 'partials/property_card.html' %}{% else %}<p>No saved properties yet.</p>{% endfor %}
+</div>
+{% endblock %}

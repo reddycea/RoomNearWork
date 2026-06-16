@@ -1,1 +1,8 @@
-
+{% extends 'base.html' %}
+{% block title %}Saved properties — RNW{% endblock %}
+{% block content %}
+<h1>Saved properties</h1>
+<div class="grid cards">
+  {% for item in saved %}{% set property = item.property %}{% include 'partials/property_card.html' %}{% else %}<p>No saved properties yet.</p>{% endfor %}
+</div>
+{% endblock %}
