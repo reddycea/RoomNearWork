@@ -1,0 +1,3 @@
+{% extends 'base.html' %}
+{% block title %}Payment webhooks — RNW{% endblock %}
+{% block content %}<h1>Payment webhook logs</h1><table><tr><th>Provider</th><th>Reference</th><th>Status</th><th>Valid</th><th>Processed</th><th>Error</th></tr>{% for log in logs %}<tr><td>{{ log.provider }}</td><td>{{ log.reference }}</td><td>{{ log.status }}</td><td>{{ 'Yes' if log.valid_signature else 'No' }}</td><td>{{ log.processed_at or '-' }}</td><td>{{ log.error or '-' }}</td></tr>{% else %}<tr><td colspan="6">No webhook logs yet.</td></tr>{% endfor %}</table>{% endblock %}

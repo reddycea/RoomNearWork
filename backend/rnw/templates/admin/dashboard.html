@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
-{% block title %}Admin dashboard — RNW{% endblock %}
+{% block title %}Admin dashboard — RNW<p><a href="{{ url_for('admin.reviews') }}">Review moderation</a> · <a href="{{ url_for('admin.reports') }}">Listing reports</a> · <a href="{{ url_for('admin.support_tickets') }}">Support tickets</a> · <a href="{{ url_for('admin.webhooks') }}">Webhook logs</a></p>
+{% endblock %}
 {% block content %}
 <div class="split"><h1>Admin dashboard</h1><a class="button" href="{{ url_for('admin.billing') }}">Billing controls</a></div>
 <div class="stats">
@@ -23,4 +24,6 @@
     <tr><td>{{ verification.user.full_name }}</td><td>{{ verification.status }}</td><td><a href="{{ url_for('admin.verifications') }}">Review</a></td></tr>
   {% else %}<tr><td colspan="3">No pending verifications.</td></tr>{% endfor %}
 </table>
+<p><a href="{{ url_for('admin.reviews') }}">Review moderation</a> · <a href="{{ url_for('admin.reports') }}">Listing reports</a> · <a href="{{ url_for('admin.support_tickets') }}">Support tickets</a> · <a href="{{ url_for('admin.webhooks') }}">Webhook logs</a></p>
 {% endblock %}
+
