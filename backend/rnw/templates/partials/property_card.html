@@ -1,1 +1,9 @@
-
+<article class="card property-card">
+  {% if property.primary_photo %}<img class="card-image" src="{{ property.primary_photo }}" alt="{{ property.title }}">{% else %}<div class="photo-placeholder">RNW</div>{% endif %}
+  <p class="eyebrow">{{ property.city }}, {{ property.province }}</p>
+  <h3><a href="{{ url_for('properties.detail', property_id=property.id) }}">{{ property.title }}</a></h3>
+  <p class="price">R{{ '%.0f'|format(property.price) }} pm</p>
+  {% if property.deposit_amount %}<p class="muted">Deposit: R{{ '%.0f'|format(property.deposit_amount) }}</p>{% endif %}
+  <p>{{ property.bedrooms }} bed · {{ property.bathrooms }} bath · {{ property.property_type }}</p>
+  <p class="muted">{% if property.furnished %}Furnished · {% endif %}{% if property.pets_allowed %}Pets allowed · {% endif %}{{ property.transport_access or 'Transport info not added' }}</p>
+</article>
