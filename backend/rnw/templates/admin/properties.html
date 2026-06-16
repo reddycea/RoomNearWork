@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Admin properties — RNW{% endblock %}
+{% block content %}
+<h1>Properties</h1>
+<table>
+  <tr><th>Title</th><th>City</th><th>Status</th><th>Action</th></tr>
+  {% for property in properties %}
+  <tr><td>{{ property.title }}</td><td>{{ property.city }}</td><td>{{ property.status }}</td><td>
+    <form class="inline-form" method="post" action="{{ url_for('admin.property_action', property_id=property.id, action='approve') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Approve</button></form>
+    <form class="inline-form" method="post" action="{{ url_for('admin.property_action', property_id=property.id, action='reject') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Reject</button></form>
+  </td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

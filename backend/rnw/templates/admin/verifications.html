@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Landlord verifications — RNW{% endblock %}
+{% block content %}
+<h1>Landlord verifications</h1>
+<table>
+  <tr><th>Landlord</th><th>Status</th><th>Documents</th><th>Action</th></tr>
+  {% for verification in verifications %}
+    <tr>
+      <td>{{ verification.user.full_name }}<br><span class="muted">{{ verification.user.email }}</span></td>
+      <td>{{ verification.status }}</td>
+      <td>
+        {% for label, url in [('ID', verification.id_document_url), ('Proof', verification.proof_of_address_url), ('Tax', verification.tax_clearance_url), ('Business', verification.business_registration_url)] %}
+          {% if url and url.startswith('private://') %}<a href="{{ url_for('admin.private_file', relative_path=url.replace('private://','')) }}">{{ label }}</a>{% endif %}
+        {% endfor %}
+      </td>
+      <td>
+        <form class="inline-form" method="post" action="{{ url_for('admin.verification_action', verification_id=verification.id, action='verify') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Verify</button></form>
+        <form class="inline-form" method="post" action="{{ url_for('admin.verification_action', verification_id=verification.id, action='reject') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="rejection_reason" placeholder="Reason"><button>Reject</button></form>
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="4">No verification submissions.</td></tr>{% endfor %}
+</table>
+{% endblock %}

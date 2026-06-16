@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}Admin billing — RNW{% endblock %}
+{% block content %}
+<h1>Admin billing controls</h1>
+<div class="stats">
+  {% for key, value in metrics.items() %}<div><strong>{{ value }}</strong><span>{{ key.replace('_', ' ') }}</span></div>{% endfor %}
+</div>
+
+<section class="panel">
+  <h2>Manual activation</h2>
+  <p class="muted">Use this when a customer pays by EFT/cash or when support needs to extend access.</p>
+  <form class="filters" method="post" action="{{ url_for('admin.activate_user_subscription', user_id=request.args.get('user_id', 0)) }}" onsubmit="this.action=this.action.replace('/0/', '/' + this.user_id.value + '/')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input name="user_id" type="number" placeholder="User ID" required>
+    <select name="plan_id">{% for plan in plans %}<option value="{{ plan.id }}">{{ plan.name }} — {{ plan.price_label() }}</option>{% endfor %}</select>
+    <input name="months" type="number" value="1" min="1" max="24">
+    <button>Activate</button>
+  </form>
+</section>
+
+<h2>Subscriptions</h2>
+<table>
+  <tr><th>User</th><th>Plan</th><th>Status</th><th>End</th><th>Actions</th></tr>
+  {% for subscription in subscriptions %}
+    <tr>
+      <td>{{ subscription.user.full_name }}<br><span class="muted">#{{ subscription.user.id }} {{ subscription.user.email }}</span></td>
+      <td>{{ subscription.plan.name }}</td>
+      <td>{{ subscription.status }}</td>
+      <td>{{ subscription.end_date.date() if subscription.end_date else '—' }}</td>
+      <td>
+        <form class="inline-form" method="post" action="{{ url_for('admin.subscription_action', subscription_id=subscription.id, action='extend') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="months" type="hidden" value="1"><button>Extend 1m</button></form>
+        <form class="inline-form" method="post" action="{{ url_for('admin.subscription_action', subscription_id=subscription.id, action='cancel') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Cancel</button></form>
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="5">No subscriptions yet.</td></tr>{% endfor %}
+</table>
+
+<h2>Invoices</h2>
+<table>
+  <tr><th>Reference</th><th>User</th><th>Description</th><th>Amount</th><th>Status</th><th>Paid</th></tr>
+  {% for invoice in invoices %}
+    <tr>
+      <td>{{ invoice.reference }}</td>
+      <td>{{ invoice.user.email }}</td>
+      <td>{{ invoice.description }}</td>
+      <td>{{ invoice.currency }} {{ '%.2f'|format(invoice.amount) }}</td>
+      <td>{{ invoice.status }}</td>
+      <td>{{ invoice.paid_at.date() if invoice.paid_at else '—' }}</td>
+    </tr>
+  {% else %}<tr><td colspan="6">No invoices yet.</td></tr>{% endfor %}
+</table>
+{% endblock %}

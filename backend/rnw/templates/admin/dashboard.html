@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Admin dashboard — RNW{% endblock %}
+{% block content %}
+<div class="split"><h1>Admin dashboard</h1><a class="button" href="{{ url_for('admin.billing') }}">Billing controls</a></div>
+<div class="stats">
+  {% for key, value in metrics.items() %}<div><strong>{{ value }}</strong><span>{{ key.replace('_', ' ') }}</span></div>{% endfor %}
+</div>
+<h2>Pending properties</h2>
+<table>
+  <tr><th>Title</th><th>Landlord</th><th>Action</th></tr>
+  {% for property in pending_properties %}
+    <tr><td>{{ property.title }}</td><td>{{ property.landlord.full_name }}</td><td>
+      <form class="inline-form" method="post" action="{{ url_for('admin.property_action', property_id=property.id, action='approve') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Approve</button></form>
+      <form class="inline-form" method="post" action="{{ url_for('admin.property_action', property_id=property.id, action='reject') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Reject</button></form>
+    </td></tr>
+  {% else %}<tr><td colspan="3">No pending properties.</td></tr>{% endfor %}
+</table>
+
+<h2>Pending landlord verifications</h2>
+<table>
+  <tr><th>Landlord</th><th>Status</th><th>Action</th></tr>
+  {% for verification in pending_verifications %}
+    <tr><td>{{ verification.user.full_name }}</td><td>{{ verification.status }}</td><td><a href="{{ url_for('admin.verifications') }}">Review</a></td></tr>
+  {% else %}<tr><td colspan="3">No pending verifications.</td></tr>{% endfor %}
+</table>
+{% endblock %}
