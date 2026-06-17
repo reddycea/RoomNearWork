@@ -107,7 +107,7 @@ docker compose up --build
 
 ## Real Launch Additions
 
-This ZIP includes the production-readiness layer for RNW:
+This project includes the production-readiness layer for RNW:
 
 - Legal pages: Terms, Privacy, Refunds, POPIA, Safety Rules
 - Support ticket system for public/authenticated users
