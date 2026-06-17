@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from builtins import property as builtin_property
 from datetime import datetime
 
 from ..extensions import db
@@ -41,8 +41,8 @@ class PropertyReview(TimestampMixin, db.Model):
         db.CheckConstraint("rating >= 1 AND rating <= 5", name="ck_property_review_rating"),
     )
 
-    @property
-    def is_public(self) -> bool:
+    @builtin_property
+    def is_reply_needed(self) -> bool:
         return self.status == "approved"
 
     def approve(self, admin_id: int | None = None) -> None:
