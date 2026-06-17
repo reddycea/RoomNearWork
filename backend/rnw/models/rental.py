@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from builtins import property as builtin_property
 from datetime import datetime, timedelta
 
 from ..extensions import db
@@ -20,7 +20,7 @@ class Inquiry(TimestampMixin, db.Model):
     sender = db.relationship("User", foreign_keys=[sender_id])
     recipient = db.relationship("User", foreign_keys=[recipient_id])
 
-    @property
+    @builtin_property
     def is_reply_needed(self) -> bool:
         return (not self.is_read) and self.created_at > datetime.utcnow() - timedelta(days=2)
 
