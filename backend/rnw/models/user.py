@@ -62,6 +62,11 @@ class User(UserMixin, TimestampMixin, db.Model):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    legal_consents = db.relationship(
+        "LegalConsent",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password, method="pbkdf2:sha256")
         self.last_password_reset_at = datetime.utcnow()
