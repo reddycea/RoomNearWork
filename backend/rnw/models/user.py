@@ -36,12 +36,32 @@ class User(UserMixin, TimestampMixin, db.Model):
     subscriptions = db.relationship("UserSubscription", back_populates="user", cascade="all, delete-orphan", order_by="UserSubscription.created_at.desc()")
     invoices = db.relationship("BillingInvoice", back_populates="user", cascade="all, delete-orphan", order_by="BillingInvoice.created_at.desc()")
     auth_tokens = db.relationship("AuthToken", back_populates="user", cascade="all, delete-orphan")
-    reviews = db.relationship("PropertyReview", foreign_keys="PropertyReview.reviewer_id", back_populates="reviewer", cascade="all, delete-orphan")
-    landlord_reviews = db.relationship("PropertyReview", foreign_keys="PropertyReview.landlord_id", back_populates="landlord")
-    listing_reports = db.relationship("ListingReport", back_populates="reporter", cascade="all, delete-orphan")
-    support_tickets = db.relationship("SupportTicket", foreign_keys="SupportTicket.user_id", back_populates="user", cascade="all, delete-orphan")
-    legal_consents = db.relationship("LegalConsent", back_populates="user", cascade="all, delete-orphan")
-
+    reviews = db.relationship(
+        "PropertyReview",
+        foreign_keys="PropertyReview.reviewer_id",
+        back_populates="reviewer",
+        cascade="all, delete-orphan",
+    )
+    
+    landlord_reviews = db.relationship(
+        "PropertyReview",
+        foreign_keys="PropertyReview.landlord_id",
+        back_populates="landlord",
+    )
+    
+    listing_reports = db.relationship(
+        "ListingReport",
+        foreign_keys="ListingReport.reporter_id",
+        back_populates="reporter",
+        cascade="all, delete-orphan",
+    )
+    
+    support_tickets = db.relationship(
+        "SupportTicket",
+        foreign_keys="SupportTicket.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password, method="pbkdf2:sha256")
         self.last_password_reset_at = datetime.utcnow()
