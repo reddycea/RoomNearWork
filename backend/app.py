@@ -1,4 +1,4 @@
-from rnw import create_app
+from backend.rnw import create_app
 
 app = create_app()
 
