@@ -61,6 +61,7 @@ def register_blueprints(app: Flask) -> None:
     from .routes.main import main_bp
     from .routes.properties import properties_bp
     from .routes.tenant import tenant_bp
+    from .routes.trust import trust_bp
 
     csrf.exempt(api_bp)
     csrf.exempt(health_bp)
@@ -74,6 +75,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(landlord_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(trust_bp)
 
 
 def register_cli(app: Flask) -> None:
