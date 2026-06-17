@@ -19,13 +19,36 @@ def _bool(name: str, default: bool = False) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
 
 
+def _database_uri() -> str:
+    database_url = os.getenv("DATABASE_URL")
+
+    if database_url:
+        # Render sometimes gives postgres://, but SQLAlchemy needs postgresql://
+        if database_url.startswith("postgres://"):
+            database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+        return database_url
+
+    # Local development fallback only
+    env_name = os.getenv("FLASK_CONFIG", os.getenv("FLASK_ENV", "development")).lower()
+
+    if env_name in {"production", "prod"}:
+        raise RuntimeError(
+            "DATABASE_URL is required in production. "
+            "Add DATABASE_URL in Render Environment Variables."
+        )
+
+    INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
+    return DEFAULT_DB
+
+
 class BaseConfig:
     APP_NAME = os.getenv("APP_NAME", "RNW")
     APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5000")
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-change-me")
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", SECRET_KEY)
 
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", DEFAULT_DB)
+    SQLALCHEMY_DATABASE_URI = _database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
