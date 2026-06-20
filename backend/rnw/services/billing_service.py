@@ -1,50 +1,46 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from uuid import uuid4
+import json
+from datetime import datetime
 
-from ..extensions import db
-from ..models import BillingInvoice, SubscriptionPlan, User, UserSubscription
-from .subscription_service import subscribe_user
+from backend.rnw.extensions import db
+from backend.rnw.models import Invoice, PaymentWebhookLog
+from backend.rnw.services.payment_service import validate_payfast_itn
+from backend.rnw.services.subscription_service import activate_subscription
 
 
-def create_invoice(user: User, plan: SubscriptionPlan, provider: str = "manual", reference: str | None = None) -> BillingInvoice:
-    invoice = BillingInvoice(
-        user_id=user.id,
-        plan_id=plan.id,
-        provider=provider,
-        reference=reference or f"rnw_inv_{uuid4().hex}",
-        amount=plan.price,
-        currency=plan.currency,
-        description=f"{plan.name} subscription - {plan.price_label()}",
-        status="pending",
-        due_date=datetime.utcnow() + timedelta(days=1),
-    )
+def create_invoice(user_id: int, plan_id: int, amount_cents: int, currency: str = "ZAR", provider: str = "disabled") -> Invoice:
+    invoice = Invoice(user_id=user_id, plan_id=plan_id, amount_cents=amount_cents, currency=currency, provider=provider, status="pending")
     db.session.add(invoice)
+    db.session.flush()
+    invoice.provider_reference = f"RNW-{invoice.id}"
     return invoice
 
 
-def activate_subscription_from_invoice(invoice: BillingInvoice, provider_reference: str | None = None) -> UserSubscription:
-    """Mark an invoice paid and activate the matching subscription exactly once.
-
-    PayFast can send duplicate IPN/webhook messages. Returning the existing
-    subscription keeps the billing flow idempotent and prevents duplicate
-    subscriptions for one invoice.
-    """
-    if invoice.plan.role != invoice.user.role:
-        raise ValueError("Invoice plan role does not match user role.")
-    if invoice.is_paid and invoice.subscription:
-        return invoice.subscription
-    if not invoice.is_paid:
-        invoice.mark_paid(provider_reference)
-    subscription = subscribe_user(invoice.user, invoice.plan, provider=invoice.provider, reference=invoice.reference)
-    invoice.subscription = subscription
-    return subscription
+def activate_invoice(invoice_id: int) -> Invoice:
+    invoice = db.session.execute(db.select(Invoice).where(Invoice.id == invoice_id).with_for_update()).scalar_one()
+    if invoice.status != "paid":
+        invoice.mark_paid()
+        activate_subscription(invoice.user_id, invoice.plan_id)
+    return invoice
 
 
-def cancel_subscription(subscription: UserSubscription) -> None:
-    subscription.cancel()
-
-
-def extend_subscription(subscription: UserSubscription, months: int = 1) -> None:
-    subscription.extend(months)
+def process_payfast_webhook(data: dict) -> tuple[bool, str]:
+    ok, message = validate_payfast_itn(data)
+    log = PaymentWebhookLog(provider="payfast", payload=json.dumps(data, sort_keys=True), signature_valid=ok, message=message)
+    db.session.add(log)
+    if not ok:
+        db.session.commit()
+        return False, message
+    reference = data.get("m_payment_id") or data.get("custom_str1") or data.get("item_name")
+    invoice = db.session.execute(db.select(Invoice).where(Invoice.provider_reference == reference).with_for_update()).scalar_one_or_none()
+    if not invoice:
+        log.message = "Invoice not found"
+        db.session.commit()
+        return False, "Invoice not found"
+    invoice.mark_paid()
+    activate_subscription(invoice.user_id, invoice.plan_id)
+    log.processed = True
+    log.message = "Processed"
+    db.session.commit()
+    return True, "Processed"
