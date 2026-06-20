@@ -1,27 +1,30 @@
-# RNW Production Upgrade
+# Room Near Work
 
-RNW is a production-style Flask SaaS rental marketplace for finding rooms and apartments near work, transport, and opportunity.
+Room Near Work is a blue-and-white, app-like rental marketplace for helping tenants find rooms and apartments close to work, transport and opportunity.
 
-## What is included
+## Major features included
 
-- Modular Flask application factory
-- Tenant, landlord, and admin roles
-- Tenant Plus subscription at **R50/month**
-- Landlord Pro subscription at **R100/month**
-- Subscription dashboard, invoice records, cancellation, and admin billing controls
-- PayFast-ready South African checkout/webhook flow plus disabled sandbox mode for development
-- Landlord limit enforcement: Landlord Pro allows **25 active listings**
-- Email verification, password reset, password strength rules, and login lockout tracking
-- Private landlord verification document storage
-- Property search by price, deposit, furnished, pets, transport access, workplace distance, and sorting
-- Explainable recommendations using search history, saved properties, applications, budget, location, and transport
-- Docker, Nginx, CI, migrations template, tests, and deployment scripts
+- Exact workplace address search, for example `11 Park Avenue`.
+- Google geocoding, Places autocomplete, and Routes matrix integration with local South African demo fallback.
+- Search by walking, taxi/public transport, or car travel time.
+- Tenant saved searches with commute filters and email alerts.
+- One account can act as both tenant and landlord after registration.
+- Landlords can create, edit, renew, archive and manage rentals.
+- Landlords can upload apartment photos, property/house registration proof and ID documents.
+- Private document access is restricted to the landlord and admin.
+- Admin verification queue for listings and private documents.
+- In-app messaging and viewing appointments.
+- Listing quality score, expiry and renewal.
+- CSRF, rate limiting, secure cookies, Talisman security headers, audit logs and login lockout.
+- Email verification and password reset flows.
+- Docker, Nginx, Redis worker, scheduler and CI workflow.
+- Legal starter pages for privacy, terms, safety, POPIA and data requests.
 
-## Quick start
+## Local quick start
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 flask --app backend.app:create_app init-db
@@ -29,116 +32,33 @@ flask --app backend.app:create_app seed-db
 flask --app backend.app:create_app run
 ```
 
-Demo users after seeding:
+Open `http://localhost:5000`.
 
-```text
-admin@rnw.local / AdminPass123!
-landlord@rnw.local / LandlordPass123!
-tenant@rnw.local / TenantPass123!
-```
+## Demo accounts
 
-## Billing
+- `admin@rnw.local` / `AdminPass123!`
+- `landlord@rnw.local` / `LandlordPass123!`
+- `tenant@rnw.local` / `TenantPass123!`
 
-Default plans are created by `flask ensure-plans` or `seed-db`:
+## Google Maps setup
 
-| Plan | Role | Price | Main limits |
-|---|---:|---:|---|
-| Tenant Plus | tenant | R50pm | applications, saved properties, AI recommendations |
-| Landlord Pro | landlord | R100pm | up to 25 active listings, tenant applications, verification, analytics |
-
-Local development uses:
+Set these in `.env`:
 
 ```env
-PAYMENT_PROVIDER=disabled
+GOOGLE_MAPS_API_KEY=your-server-key
+GOOGLE_MAPS_BROWSER_KEY=your-browser-key
+GOOGLE_MAPS_REGION=ZA
+GOOGLE_MAPS_LANGUAGE=en-ZA
+GOOGLE_ROUTE_MATRIX_ENABLED=true
 ```
 
-This activates paid plans immediately and records paid invoices. For production South African billing, configure:
+Enable Geocoding API, Places API and Routes API in Google Cloud.
 
-```env
-PAYMENT_PROVIDER=payfast
-PAYFAST_SANDBOX=false
-PAYFAST_MERCHANT_ID=...
-PAYFAST_MERCHANT_KEY=...
-PAYFAST_PASSPHRASE=...
-APP_BASE_URL=https://your-domain.example
-```
+## Production notes
 
-PayFast webhooks are received at:
-
-```text
-POST /billing/webhooks/payfast
-```
-
-## Database migrations
-
-For production, use Flask-Migrate instead of dropping tables:
-
-```bash
-flask --app backend.app:create_app db init
-flask --app backend.app:create_app db migrate -m "initial schema"
-flask --app backend.app:create_app db upgrade
-```
-
-A migration template and an example initial migration are included under `backend/migrations`.
-
-## Tests
-
-```bash
-pytest backend/tests
-```
-
-## Docker
-
-```bash
-docker compose up --build
-```
-
-## Production checklist
-
-- Change all secrets in `.env`
-- Use MySQL or Postgres instead of local SQLite
-- Set `PAYMENT_PROVIDER=payfast` and configure PayFast merchant credentials
-- Set `EMAIL_VERIFICATION_REQUIRED=true`
-- Use HTTPS behind Nginx
-- Configure Redis for cache and rate limiting
-- Store uploads in private object storage for large deployments
-- Schedule `scripts/backup_db.sh`
-
-
-## Real Launch Additions
-
-This project includes the production-readiness layer for RNW:
-
-- Legal pages: Terms, Privacy, Refunds, POPIA, Safety Rules
-- Support ticket system for public/authenticated users
-- Listing reporting and admin moderation
-- Property reviews with admin approval and landlord responses
-- Payment webhook logs for PayFast IPN auditing
-- Storage abstraction for local, Cloudinary, S3, or DigitalOcean Spaces
-- Legal consent records captured during registration
-- Admin dashboards for reviews, reports, support, billing, and webhook logs
-
-Before launch, replace the legal templates with lawyer-reviewed policies, configure real SMTP, configure PayFast production credentials, connect a domain, and move uploads to object storage.
-
-## Merged package improvements
-
-This merged version also adds environment-configurable subscription prices:
-
-```env
-TENANT_MONTHLY_PRICE=50
-LANDLORD_MONTHLY_PRICE=100
-LANDLORD_MAX_LISTINGS=25
-SUBSCRIPTION_CURRENCY=ZAR
-```
-
-After changing those values, run:
-
-```bash
-flask --app backend.app:create_app ensure-plans
-```
-
-You can also update plan prices directly:
-
-```bash
-flask --app backend.app:create_app set-plan-prices --tenant 75 --landlord 150 --landlord-listings 50
-```
+- Replace all development secrets.
+- Use PostgreSQL and Redis.
+- Set `RATELIMIT_STORAGE_URI=redis://redis:6379/1`.
+- Use HTTPS and set secure cookies.
+- Review legal pages with a qualified legal professional before launch.
+- Add virus scanning and private object storage for uploaded documents before handling real ID documents.

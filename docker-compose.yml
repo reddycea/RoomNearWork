@@ -2,55 +2,52 @@ services:
   web:
     build: .
     env_file: .env
-    environment:
-      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-rnw}:${MYSQL_PASSWORD:-change-db-password}@db:3306/${MYSQL_DATABASE:-rnw}
-      CACHE_TYPE: RedisCache
-      REDIS_URL: redis://redis:6379/0
-      RATELIMIT_STORAGE_URI: redis://redis:6379/1
-      AUTO_INIT_DB: "true"
-      SEED_DEMO_DATA: "true"
+    ports:
+      - "8000:8000"
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      - db
+      - redis
     volumes:
-      - uploads:/app/backend/instance/uploads
-    expose:
-      - "5000"
-
+      - ./uploads:/app/uploads
+      - ./backend/rnw/static:/app/backend/rnw/static:ro
+  worker:
+    build: .
+    command: python scripts/run_worker.py
+    env_file: .env
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - ./uploads:/app/uploads
+  scheduler:
+    build: .
+    command: python scripts/run_scheduler.py
+    env_file: .env
+    depends_on:
+      - web
+      - redis
+      - db
+    volumes:
+      - ./uploads:/app/uploads
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: rnw
+      POSTGRES_USER: rnw
+      POSTGRES_PASSWORD: change-db-password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
   nginx:
     image: nginx:1.27-alpine
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./backend/rnw/static:/app/backend/rnw/static:ro
+      - ./uploads:/app/uploads:ro
     ports:
       - "80:80"
     depends_on:
       - web
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - uploads:/app/backend/instance/uploads:ro
-
-  db:
-    image: mysql:8.4
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-root-password}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-rnw}
-      MYSQL_USER: ${MYSQL_USER:-rnw}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-db-password}
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u${MYSQL_USER:-rnw} -p${MYSQL_PASSWORD:-change-db-password}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
 volumes:
-  mysql_data:
-  uploads:
+  pgdata:

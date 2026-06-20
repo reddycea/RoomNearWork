@@ -1,22 +1,13 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential default-libmysqlclient-dev curl \
-    && rm -rf /var/lib/apt/lists/*
-
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential curl && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
+RUN pip install -r requirements.txt
 COPY . .
-
-RUN chmod +x ./docker/entrypoint.sh
-
-EXPOSE 5000
-
-ENTRYPOINT ["./docker/entrypoint.sh"]
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "backend.app:app"]
+EXPOSE 8000
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "backend.app:create_app()"]
