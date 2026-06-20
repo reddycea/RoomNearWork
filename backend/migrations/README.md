@@ -1,1 +1,1 @@
-Use `flask db init`, `flask db migrate`, and `flask db upgrade` when enabling Alembic migrations.
+Alembic migration environment for RNW. Use `flask --app backend.app:create_app db upgrade`.
