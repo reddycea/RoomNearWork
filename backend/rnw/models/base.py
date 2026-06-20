@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from datetime import datetime
 
-from ..extensions import db
+from backend.rnw.extensions import db
 
 
 class TimestampMixin:

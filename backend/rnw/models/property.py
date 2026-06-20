@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
+import math
+from datetime import datetime, timedelta
 
-from ..extensions import db
+from flask import current_app
+from sqlalchemy import Index
+
+from backend.rnw.extensions import db
 from .base import TimestampMixin
 
 
@@ -13,134 +17,124 @@ class Property(TimestampMixin, db.Model):
     landlord_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=False)
-    property_type = db.Column(db.String(50), nullable=False, index=True)
-    address = db.Column(db.String(255), nullable=False)
-    city = db.Column(db.String(100), nullable=False, index=True)
-    province = db.Column(db.String(50), nullable=False, index=True)
-    postal_code = db.Column(db.String(10), nullable=True)
-    latitude = db.Column(db.Float, nullable=True)
-    longitude = db.Column(db.Float, nullable=True)
-    price = db.Column(db.Float, nullable=False, index=True)
-    deposit_amount = db.Column(db.Float, nullable=True, index=True)
-    bedrooms = db.Column(db.Integer, default=0)
-    bathrooms = db.Column(db.Float, default=0)
-    parking = db.Column(db.Integer, default=0)
-    area_sqm = db.Column(db.Float, nullable=True)
+    rent_amount = db.Column(db.Integer, nullable=False)
+    deposit_amount = db.Column(db.Integer, default=0, nullable=False)
+    bedrooms = db.Column(db.Integer, default=1, nullable=False)
+    bathrooms = db.Column(db.Integer, default=1, nullable=False)
+    city = db.Column(db.String(120), index=True, nullable=False)
+    province = db.Column(db.String(120), index=True, nullable=False)
+    suburb = db.Column(db.String(120), index=True)
+    address_line = db.Column(db.String(255))  # exact address, never exposed publicly by default
+    formatted_address = db.Column(db.String(500))
+    google_place_id = db.Column(db.String(255), index=True)
+    approximate_address = db.Column(db.String(255))
+    address_visibility = db.Column(db.String(40), default="approved_viewing", nullable=False)
+    latitude = db.Column(db.Float, index=True)
+    longitude = db.Column(db.Float, index=True)
+    workplace_distance_km = db.Column(db.Float)
+    nearest_transport = db.Column(db.String(160))
+    commute_notes = db.Column(db.Text)
+    furnished = db.Column(db.Boolean, default=False, nullable=False)
     pets_allowed = db.Column(db.Boolean, default=False, nullable=False)
-    furnished = db.Column(db.Boolean, default=False, nullable=False, index=True)
-    transport_access = db.Column(db.String(255), nullable=True)
-    available_date = db.Column(db.Date, nullable=True)
-    minimum_lease = db.Column(db.Integer, default=12)
-    is_available = db.Column(db.Boolean, default=True, nullable=False)
-    status = db.Column(db.String(20), default="pending", index=True)  # pending, approved, rejected
+    transport_access = db.Column(db.Boolean, default=False, nullable=False)
+    image_url = db.Column(db.String(500))
+    status = db.Column(db.String(40), default="under_review", index=True, nullable=False)
+    status_reason = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=True, index=True, nullable=False)
     view_count = db.Column(db.Integer, default=0, nullable=False)
-    featured_until = db.Column(db.DateTime, nullable=True)
+    quality_score = db.Column(db.Integer, default=0, nullable=False)
+    quality_score_details = db.Column(db.Text)
+    expires_at = db.Column(db.DateTime)
+    renewed_at = db.Column(db.DateTime)
+    listing_verified = db.Column(db.Boolean, default=False, nullable=False)
+    verified_at = db.Column(db.DateTime)
+    verified_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
 
-    landlord = db.relationship("User", back_populates="properties")
-    photos = db.relationship("PropertyPhoto", back_populates="property", cascade="all, delete-orphan")
-    saved_by = db.relationship("SavedProperty", back_populates="property", cascade="all, delete-orphan")
-    inquiries = db.relationship("Inquiry", back_populates="property", cascade="all, delete-orphan")
-    applications = db.relationship("RentalApplication", back_populates="property", cascade="all, delete-orphan")
-    reviews = db.relationship("PropertyReview", back_populates="property", cascade="all, delete-orphan", order_by="PropertyReview.created_at.desc()")
-    reports = db.relationship("ListingReport", back_populates="property", cascade="all, delete-orphan")
+    landlord = db.relationship("User", foreign_keys=[landlord_id], back_populates="properties")
+    verified_by = db.relationship("User", foreign_keys=[verified_by_id])
+    applications = db.relationship("RentalApplication", back_populates="property", lazy="dynamic")
+    assets = db.relationship("PropertyAsset", back_populates="property", cascade="all, delete-orphan", order_by="PropertyAsset.is_primary.desc(), PropertyAsset.created_at")
 
-    @property
-    def primary_photo(self) -> str | None:
-        primary = next((photo for photo in self.photos if photo.is_primary), None)
-        return (primary or self.photos[0]).photo_url if self.photos else None
+    __table_args__ = (
+        Index("ix_properties_search", "status", "is_active", "city", "province", "rent_amount"),
+        Index("ix_properties_geo", "latitude", "longitude"),
+    )
 
-    @property
-    def average_rating(self) -> float:
-        ratings = [review.rating for review in self.reviews if review.status == "approved"]
-        return round(sum(ratings) / len(ratings), 2) if ratings else 0.0
+    def public_location(self) -> str:
+        parts = [self.suburb, self.city, self.province]
+        return ", ".join([p for p in parts if p])
 
-    @property
-    def approved_review_count(self) -> int:
-        return len([review for review in self.reviews if review.status == "approved"])
+    def public_address(self) -> str:
+        return self.approximate_address or self.public_location()
 
-    @property
-    def is_featured(self) -> bool:
-        return bool(self.featured_until and self.featured_until > datetime.utcnow())
+    def photo_assets(self) -> list["PropertyAsset"]:
+        return [asset for asset in self.assets if asset.kind == "photo"]
 
-    def increment_views(self) -> None:
-        self.view_count = (self.view_count or 0) + 1
+    def primary_photo(self) -> "PropertyAsset | None":
+        photos = self.photo_assets()
+        return photos[0] if photos else None
 
-    def to_dict(self, include_landlord: bool = False) -> dict:
-        payload = {
-            "id": self.id,
-            "title": self.title,
-            "description": self.description,
-            "property_type": self.property_type,
-            "address": self.address,
-            "city": self.city,
-            "province": self.province,
-            "postal_code": self.postal_code,
-            "latitude": self.latitude,
-            "longitude": self.longitude,
-            "price": self.price,
-            "deposit_amount": self.deposit_amount,
-            "bedrooms": self.bedrooms,
-            "bathrooms": self.bathrooms,
-            "parking": self.parking,
-            "area_sqm": self.area_sqm,
-            "pets_allowed": self.pets_allowed,
-            "furnished": self.furnished,
-            "transport_access": self.transport_access,
-            "available_date": self.available_date.isoformat() if self.available_date else None,
-            "minimum_lease": self.minimum_lease,
-            "is_available": self.is_available,
-            "status": self.status,
-            "view_count": self.view_count,
-            "primary_photo": self.primary_photo,
-            "average_rating": self.average_rating,
-            "approved_review_count": self.approved_review_count,
-        }
-        if include_landlord and self.landlord:
-            payload["landlord"] = self.landlord.to_dict()
-        return payload
+    def private_document_assets(self) -> list["PropertyAsset"]:
+        return [asset for asset in self.assets if asset.kind in {"proof_registration", "id_document"}]
+
+    def has_required_documents(self) -> bool:
+        kinds = {asset.kind for asset in self.assets}
+        return "proof_registration" in kinds and "id_document" in kinds
+
+    def documents_approved(self) -> bool:
+        docs = self.private_document_assets()
+        return bool(docs) and all(asset.review_status == "approved" for asset in docs)
+
+    def renew(self, days: int | None = None) -> None:
+        days = days or current_app.config.get("LISTING_EXPIRES_DAYS", 30)
+        self.expires_at = datetime.utcnow() + timedelta(days=days)
+        self.renewed_at = datetime.utcnow()
+        if self.status == "expired":
+            self.status = "available"
+            self.is_active = True
+
+    @staticmethod
+    def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        r = 6371.0
+        phi1, phi2 = math.radians(lat1), math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlambda = math.radians(lon2 - lon1)
+        a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+        return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    @classmethod
+    def increment_views_atomic(cls, property_id: int) -> None:
+        db.session.execute(
+            db.update(cls).where(cls.id == property_id).values(view_count=cls.view_count + 1)
+        )
+        db.session.commit()
 
 
-class PropertyPhoto(db.Model):
-    __tablename__ = "property_photos"
+class PropertyAsset(TimestampMixin, db.Model):
+    __tablename__ = "property_assets"
 
     id = db.Column(db.Integer, primary_key=True)
-    property_id = db.Column(db.Integer, db.ForeignKey("properties.id"), nullable=False)
-    photo_url = db.Column(db.String(255), nullable=False)
+    property_id = db.Column(db.Integer, db.ForeignKey("properties.id"), nullable=False, index=True)
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    kind = db.Column(db.String(40), nullable=False, index=True)  # photo, proof_registration, id_document
+    original_filename = db.Column(db.String(255), nullable=False)
+    stored_filename = db.Column(db.String(255), nullable=False, unique=True)
+    relative_path = db.Column(db.String(500), nullable=False, unique=True)
+    mime_type = db.Column(db.String(120))
+    size_bytes = db.Column(db.Integer, default=0, nullable=False)
+    is_private = db.Column(db.Boolean, default=True, nullable=False)
     is_primary = db.Column(db.Boolean, default=False, nullable=False)
-    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    review_status = db.Column(db.String(40), default="pending", nullable=False, index=True)
+    review_note = db.Column(db.Text)
+    reviewed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    reviewed_at = db.Column(db.DateTime)
+    virus_scan_status = db.Column(db.String(40), default="not_scanned", nullable=False)
 
-    property = db.relationship("Property", back_populates="photos")
+    property = db.relationship("Property", back_populates="assets")
+    uploaded_by = db.relationship("User", foreign_keys=[uploaded_by_id])
+    reviewed_by = db.relationship("User", foreign_keys=[reviewed_by_id])
 
-
-class SavedProperty(db.Model):
-    __tablename__ = "saved_properties"
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    property_id = db.Column(db.Integer, db.ForeignKey("properties.id"), nullable=False)
-    saved_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    user = db.relationship("User", back_populates="saved_properties")
-    property = db.relationship("Property", back_populates="saved_by")
-
-    __table_args__ = (db.UniqueConstraint("user_id", "property_id", name="uq_saved_property"),)
-
-
-class SearchHistory(db.Model):
-    __tablename__ = "search_history"
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    search_address = db.Column(db.String(255), nullable=True)
-    latitude = db.Column(db.Float, nullable=True)
-    longitude = db.Column(db.Float, nullable=True)
-    radius_km = db.Column(db.Float, default=5)
-    min_price = db.Column(db.Float, nullable=True)
-    max_price = db.Column(db.Float, nullable=True)
-    bedrooms = db.Column(db.Integer, nullable=True)
-    property_type = db.Column(db.String(50), nullable=True)
-    result_count = db.Column(db.Integer, default=0)
-    session_id = db.Column(db.String(100), nullable=True)
-    searched_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    user = db.relationship("User", back_populates="searches")
+    __table_args__ = (
+        Index("ix_property_assets_kind_property", "property_id", "kind"),
+        Index("ix_property_assets_review", "kind", "review_status"),
+    )
