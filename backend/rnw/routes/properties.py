@@ -1,196 +1,304 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_from_directory, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
-from ..extensions import db
-from ..models import Property, PropertyPhoto, SearchHistory
-from ..services.geolocation_service import filter_properties_by_distance, geocode_address
-from ..services.subscription_service import landlord_can_create_listing
-from ..utils.decorators import email_verified_required, roles_required, subscription_required
-from ..utils.security import save_image
-from ..utils.validators import PROVINCES, parse_bool, parse_optional_float, parse_optional_int
+from backend.rnw.extensions import db, limiter
+from backend.rnw.models import Property, PropertyAsset, RentalApplication
+from backend.rnw.services.audit_service import log_action
+from backend.rnw.services.geolocation_service import bounding_box, filter_properties_by_distance
+from backend.rnw.services.google_maps_service import attach_commute_measures, geocode_address, geocode_place_id, geocode_property_address
+from backend.rnw.services.listing_quality_service import update_listing_quality
+from backend.rnw.services.seo_service import real_estate_json_ld
+from backend.rnw.services.subscription_service import landlord_can_create_listing, lock_user
+from backend.rnw.utils.decorators import landlord_required, tenant_required
+from backend.rnw.utils.security import clean_user_text
+from backend.rnw.utils.uploads import ALLOWED_DOCUMENT_EXTENSIONS, ALLOWED_IMAGE_EXTENSIONS, guess_mime, save_upload
 
 properties_bp = Blueprint("properties", __name__, url_prefix="/properties")
 
 
-@properties_bp.get("/")
-def list_properties():
-    query = Property.query.filter_by(status="approved", is_available=True)
+def _save_property_asset(prop: Property, file, kind: str, private: bool) -> PropertyAsset | None:
+    if not file or not file.filename:
+        return None
+    allowed = ALLOWED_IMAGE_EXTENSIONS if kind == "photo" else ALLOWED_DOCUMENT_EXTENSIONS
+    subdir = "private" if private else "photos"
+    base_dir = current_app.config["UPLOAD_FOLDER_PATH"] / "properties" / str(prop.id) / subdir
+    saved_path = save_upload(file, base_dir, allowed)
+    relative_path = saved_path.relative_to(current_app.config["UPLOAD_FOLDER_PATH"])
+    existing_primary = any(asset.kind == "photo" and asset.is_primary for asset in prop.assets)
+    return PropertyAsset(
+        property_id=prop.id,
+        uploaded_by_id=current_user.id,
+        kind=kind,
+        original_filename=clean_user_text(file.filename, 255),
+        stored_filename=saved_path.name,
+        relative_path=str(relative_path),
+        mime_type=guess_mime(saved_path, file.mimetype),
+        size_bytes=saved_path.stat().st_size,
+        is_private=private,
+        is_primary=(kind == "photo" and not existing_primary),
+        review_status="approved" if kind == "photo" else "pending",
+    )
 
+
+def _query_by_area(query, area: str | None, city: str | None, province: str | None):
+    area_terms = [term for term in {area, city, province} if term]
+    if not area_terms:
+        return query
+    filters = []
+    for term in area_terms:
+        like = f"%{term}%"
+        filters.extend([Property.suburb.ilike(like), Property.city.ilike(like), Property.province.ilike(like)])
+    return query.filter(or_(*filters))
+
+
+def _populate_property_from_form(prop: Property) -> None:
+    exact_address = clean_user_text(request.form.get("address_line"), 255)
+    city = clean_user_text(request.form.get("city"), 120)
+    province = clean_user_text(request.form.get("province"), 120)
+    suburb = clean_user_text(request.form.get("suburb"), 120)
+    place_id = request.form.get("google_place_id", "").strip()
+    geocoded = geocode_place_id(place_id, exact_address) if place_id else (geocode_property_address(exact_address, suburb, city, province) if exact_address else None)
+
+    prop.title = clean_user_text(request.form.get("title"), 200)
+    prop.description = clean_user_text(request.form.get("description"), 5000)
+    prop.rent_amount = request.form.get("rent_amount", type=int) or 0
+    prop.deposit_amount = request.form.get("deposit_amount", type=int) or 0
+    prop.bedrooms = request.form.get("bedrooms", type=int) or 1
+    prop.bathrooms = request.form.get("bathrooms", type=int) or 1
+    prop.city = city or (geocoded.city if geocoded else "")
+    prop.province = province or (geocoded.province if geocoded else "")
+    prop.suburb = suburb or (geocoded.suburb if geocoded else None)
+    prop.address_line = exact_address
+    prop.formatted_address = geocoded.formatted_address if geocoded else None
+    prop.google_place_id = geocoded.place_id if geocoded else place_id or None
+    prop.latitude = geocoded.latitude if geocoded else None
+    prop.longitude = geocoded.longitude if geocoded else None
+    prop.approximate_address = clean_user_text(request.form.get("approximate_address"), 255) or (geocoded.area_label if geocoded else None)
+    prop.furnished = bool(request.form.get("furnished"))
+    prop.pets_allowed = bool(request.form.get("pets_allowed"))
+    prop.transport_access = bool(request.form.get("transport_access"))
+    prop.nearest_transport = clean_user_text(request.form.get("nearest_transport"), 160)
+    prop.commute_notes = clean_user_text(request.form.get("commute_notes"), 1000)
+
+
+def _handle_asset_uploads(prop: Property) -> None:
+    for photo in request.files.getlist("photos")[:8]:
+        asset = _save_property_asset(prop, photo, "photo", private=False)
+        if asset:
+            db.session.add(asset)
+    proof = _save_property_asset(prop, request.files.get("proof_registration"), "proof_registration", private=True)
+    id_doc = _save_property_asset(prop, request.files.get("id_document"), "id_document", private=True)
+    if proof:
+        db.session.add(proof)
+    if id_doc:
+        db.session.add(id_doc)
+
+
+@properties_bp.get("")
+def index():
+    query = Property.query.filter(Property.is_active.is_(True), Property.status == "available")
     city = request.args.get("city", "").strip()
-    province = request.args.get("province", "").strip()
-    property_type = request.args.get("property_type", "").strip()
-    transport_access = request.args.get("transport_access", "").strip()
-    min_price = parse_optional_float(request.args.get("min_price"))
-    max_price = parse_optional_float(request.args.get("max_price"))
-    max_deposit = parse_optional_float(request.args.get("max_deposit"))
-    bedrooms = parse_optional_int(request.args.get("bedrooms"))
-    workplace = request.args.get("workplace", "").strip()
-    radius_km = parse_optional_float(request.args.get("radius_km")) or 10
+    workplace_address = request.args.get("workplace_address", "").strip()
+    workplace_place_id = request.args.get("workplace_place_id", "").strip()
+    travel_mode = request.args.get("travel_mode", "all")
+    max_rent = request.args.get("max_rent", type=int)
     furnished = request.args.get("furnished")
-    pets_allowed = request.args.get("pets_allowed")
-    sort = request.args.get("sort", "newest")
+    transport = request.args.get("transport")
+    max_distance = request.args.get("max_distance", type=float) or current_app.config.get("DEFAULT_SEARCH_RADIUS_KM", 20)
+    max_travel_minutes = request.args.get("max_travel_minutes", type=int) or current_app.config.get("DEFAULT_MAX_TRAVEL_MINUTES", 45)
+    search_context = None
 
     if city:
         query = query.filter(Property.city.ilike(f"%{city}%"))
-    if province:
-        query = query.filter(Property.province == province)
-    if property_type:
-        query = query.filter(Property.property_type == property_type)
-    if transport_access:
-        query = query.filter(Property.transport_access.ilike(f"%{transport_access}%"))
-    if min_price is not None:
-        query = query.filter(Property.price >= min_price)
-    if max_price is not None:
-        query = query.filter(Property.price <= max_price)
-    if max_deposit is not None:
-        query = query.filter((Property.deposit_amount == None) | (Property.deposit_amount <= max_deposit))  # noqa: E711
-    if bedrooms is not None:
-        query = query.filter(Property.bedrooms >= bedrooms)
-    if furnished == "1":
+    if max_rent:
+        query = query.filter(Property.rent_amount <= max_rent)
+    if furnished:
         query = query.filter(Property.furnished.is_(True))
-    if pets_allowed == "1":
-        query = query.filter(Property.pets_allowed.is_(True))
+    if transport:
+        query = query.filter(Property.transport_access.is_(True))
 
-    coord = geocode_address(workplace)
-    distances = {}
-    if coord:
-        base_properties = query.limit(500).all()
-        matches = filter_properties_by_distance(base_properties, coord.latitude, coord.longitude, radius_km)
-        properties = [prop for prop, distance in matches]
-        distances = {prop.id: distance for prop, distance in matches}
-        if sort == "cheapest":
-            properties = sorted(properties, key=lambda p: p.price)
-        elif sort == "highest":
-            properties = sorted(properties, key=lambda p: p.price, reverse=True)
-        elif sort == "newest":
-            properties = sorted(properties, key=lambda p: p.created_at, reverse=True)
-    else:
-        if sort == "cheapest":
-            query = query.order_by(Property.price.asc())
-        elif sort == "highest":
-            query = query.order_by(Property.price.desc())
-        elif sort == "popular":
-            query = query.order_by(Property.view_count.desc(), Property.created_at.desc())
+    if workplace_address or workplace_place_id:
+        origin = geocode_place_id(workplace_place_id, workplace_address) if workplace_place_id else geocode_address(workplace_address)
+        search_context = origin
+        if origin.latitude is not None and origin.longitude is not None:
+            min_lat, max_lat, min_lon, max_lon = bounding_box(origin.latitude, origin.longitude, float(max_distance))
+            candidate_query = query.filter(Property.latitude.between(min_lat, max_lat), Property.longitude.between(min_lon, max_lon))
+            candidates = candidate_query.limit(2000).all()
+            if not candidates:
+                candidates = _query_by_area(query, origin.area_label, origin.city, origin.province).limit(2000).all()
+            properties = filter_properties_by_distance(candidates, origin.latitude, origin.longitude, float(max_distance)) or candidates
+            attach_commute_measures(origin, properties, selected_mode=travel_mode)
+            if max_travel_minutes:
+                properties = [prop for prop in properties if not getattr(prop, "commute_modes", None) or any(m.duration_min is not None and m.duration_min <= max_travel_minutes for m in prop.commute_modes)]
+            properties.sort(key=lambda prop: min([m.duration_min for m in getattr(prop, "commute_modes", []) if m.duration_min is not None] or [999999]))
         else:
-            query = query.order_by(Property.created_at.desc())
-        properties = query.limit(200).all()
+            properties = _query_by_area(query, origin.area_label, origin.city, origin.province).order_by(Property.created_at.desc()).limit(100).all()
+    else:
+        properties = query.order_by(Property.created_at.desc()).limit(100).all()
 
-    search = SearchHistory(
-        user_id=current_user.id if current_user.is_authenticated else None,
-        search_address=workplace or city or province,
-        latitude=coord.latitude if coord else None,
-        longitude=coord.longitude if coord else None,
-        radius_km=radius_km,
-        min_price=min_price,
-        max_price=max_price,
-        bedrooms=bedrooms,
-        property_type=property_type,
-        result_count=len(properties),
-        session_id=request.cookies.get("session"),
-    )
-    db.session.add(search)
-    db.session.commit()
-
-    return render_template("properties/list.html", properties=properties, distances=distances, provinces=PROVINCES)
+    return render_template("properties/index.html", properties=properties, search_context=search_context, google_maps_browser_key=current_app.config.get("GOOGLE_MAPS_BROWSER_KEY", ""))
 
 
 @properties_bp.get("/<int:property_id>")
 def detail(property_id: int):
-    prop = db.session.get(Property, property_id) or abort(404)
-    if prop.status != "approved" and (not current_user.is_authenticated or current_user.id != prop.landlord_id and current_user.role != "admin"):
+    property_ = db.session.get(Property, property_id) or abort(404)
+    if not property_.is_active and not (current_user.is_authenticated and (current_user.id == property_.landlord_id or current_user.is_admin)):
         abort(404)
-    prop.increment_views()
-    db.session.commit()
-    return render_template("properties/detail.html", property=prop)
+    Property.increment_views_atomic(property_id)
+    json_ld = real_estate_json_ld(property_)
+    return render_template("properties/detail.html", property=property_, json_ld=json_ld)
 
 
 @properties_bp.route("/new", methods=["GET", "POST"])
-@roles_required("landlord", "admin")
-@email_verified_required
-@subscription_required
+@login_required
+@landlord_required
+@limiter.limit("10 per hour")
 def create():
-    allowed, limit, count = landlord_can_create_listing(current_user)
-    if not allowed:
-        flash(f"Your Landlord Pro plan allows {limit} active listings. You currently have {count}.", "warning")
-        return redirect(url_for("landlord.dashboard"))
     if request.method == "POST":
-        prop = _property_from_form(Property(landlord_id=current_user.id))
+        lock_user(current_user.id)
+        if not landlord_can_create_listing(current_user.id):
+            db.session.rollback()
+            flash("Your active listing limit has been reached.", "danger")
+            return render_template("properties/form.html", property=None)
+        prop = Property(landlord_id=current_user.id, status="under_review", is_active=True)
+        _populate_property_from_form(prop)
+        prop.renew()
         db.session.add(prop)
         db.session.flush()
-        _attach_uploaded_photos(prop)
+        try:
+            _handle_asset_uploads(prop)
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+            return render_template("properties/form.html", property=prop)
+        db.session.flush()
+        update_listing_quality(prop)
+        log_action("listing_created", "Property", prop.id)
         db.session.commit()
-        flash("Property submitted for admin approval.", "success")
+        flash("Listing submitted for review. Admin will check your photos, property registration proof and ID document.", "success")
         return redirect(url_for("landlord.dashboard"))
-    return render_template("properties/form.html", property=None, provinces=PROVINCES)
+    return render_template("properties/form.html", property=None)
 
 
 @properties_bp.route("/<int:property_id>/edit", methods=["GET", "POST"])
 @login_required
+@landlord_required
 def edit(property_id: int):
     prop = db.session.get(Property, property_id) or abort(404)
-    if current_user.id != prop.landlord_id and current_user.role != "admin":
+    if prop.landlord_id != current_user.id and not current_user.is_admin:
         abort(403)
     if request.method == "POST":
-        _property_from_form(prop)
-        _attach_uploaded_photos(prop)
+        _populate_property_from_form(prop)
+        if prop.status in {"available", "rejected"}:
+            prop.status = "under_review"
+            prop.status_reason = None
+            prop.is_active = True
+        try:
+            _handle_asset_uploads(prop)
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+            return render_template("properties/form.html", property=prop)
+        db.session.flush()
+        update_listing_quality(prop)
+        log_action("listing_updated", "Property", prop.id)
         db.session.commit()
-        flash("Property updated.", "success")
-        return redirect(url_for("properties.detail", property_id=prop.id))
-    return render_template("properties/form.html", property=prop, provinces=PROVINCES)
+        flash("Listing updated and sent for review if needed.", "success")
+        return redirect(url_for("landlord.dashboard"))
+    return render_template("properties/form.html", property=prop)
 
 
-@properties_bp.post("/<int:property_id>/delete")
+@properties_bp.post("/<int:property_id>/archive")
 @login_required
-def delete(property_id: int):
+@landlord_required
+def archive(property_id: int):
     prop = db.session.get(Property, property_id) or abort(404)
-    if current_user.id != prop.landlord_id and current_user.role != "admin":
+    if prop.landlord_id != current_user.id:
         abort(403)
-    db.session.delete(prop)
+    prop.status = "archived"
+    prop.is_active = False
+    log_action("listing_archived", "Property", prop.id)
     db.session.commit()
-    flash("Property deleted.", "info")
+    flash("Listing archived.", "success")
     return redirect(url_for("landlord.dashboard"))
 
 
-def _property_from_form(prop: Property) -> Property:
-    form = request.form
-    prop.title = form.get("title", "").strip()
-    prop.description = form.get("description", "").strip()
-    prop.property_type = form.get("property_type", "room")
-    prop.address = form.get("address", "").strip()
-    prop.city = form.get("city", "").strip()
-    prop.province = form.get("province", "")
-    prop.postal_code = form.get("postal_code", "")
-    prop.price = float(form.get("price") or 0)
-    prop.deposit_amount = parse_optional_float(form.get("deposit_amount"))
-    prop.bedrooms = int(form.get("bedrooms") or 0)
-    prop.bathrooms = float(form.get("bathrooms") or 0)
-    prop.parking = int(form.get("parking") or 0)
-    prop.area_sqm = parse_optional_float(form.get("area_sqm"))
-    prop.pets_allowed = parse_bool(form.get("pets_allowed"))
-    prop.furnished = parse_bool(form.get("furnished"))
-    prop.transport_access = form.get("transport_access", "").strip()
-    prop.minimum_lease = int(form.get("minimum_lease") or 12)
-    prop.latitude = parse_optional_float(form.get("latitude"))
-    prop.longitude = parse_optional_float(form.get("longitude"))
-
-    if not prop.latitude or not prop.longitude:
-        coord = geocode_address(f"{prop.address}, {prop.city}, {prop.province}")
-        if coord:
-            prop.latitude = coord.latitude
-            prop.longitude = coord.longitude
-
-    available_date = form.get("available_date")
-    if available_date:
-        prop.available_date = datetime.strptime(available_date, "%Y-%m-%d").date()
-    return prop
+@properties_bp.post("/assets/<int:asset_id>/delete")
+@login_required
+@landlord_required
+def delete_asset(asset_id: int):
+    asset = db.session.get(PropertyAsset, asset_id) or abort(404)
+    prop = asset.property
+    if prop.landlord_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    path = current_app.config["UPLOAD_FOLDER_PATH"] / asset.relative_path
+    db.session.delete(asset)
+    db.session.flush()
+    update_listing_quality(prop)
+    db.session.commit()
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:
+        current_app.logger.warning("Could not remove upload %s", path)
+    flash("File removed.", "success")
+    return redirect(url_for("properties.edit", property_id=prop.id))
 
 
-def _attach_uploaded_photos(prop: Property) -> None:
-    for index, file in enumerate(request.files.getlist("photos")):
-        if file and file.filename:
-            url = save_image(file, "properties")
-            db.session.add(PropertyPhoto(property=prop, photo_url=url, is_primary=(not prop.photos and index == 0)))
+@properties_bp.post("/assets/<int:asset_id>/primary")
+@login_required
+@landlord_required
+def primary_asset(asset_id: int):
+    asset = db.session.get(PropertyAsset, asset_id) or abort(404)
+    if asset.kind != "photo":
+        abort(400)
+    prop = asset.property
+    if prop.landlord_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    for photo in prop.photo_assets():
+        photo.is_primary = False
+    asset.is_primary = True
+    db.session.commit()
+    flash("Main photo updated.", "success")
+    return redirect(url_for("properties.edit", property_id=prop.id))
+
+
+@properties_bp.get("/media/<int:asset_id>")
+def media(asset_id: int):
+    asset = db.session.get(PropertyAsset, asset_id) or abort(404)
+    prop = asset.property
+    if asset.is_private:
+        if not current_user.is_authenticated:
+            abort(403)
+        if not (current_user.is_admin or current_user.id == prop.landlord_id):
+            abort(403)
+    root = current_app.config["UPLOAD_FOLDER_PATH"]
+    path = root / asset.relative_path
+    if not path.exists():
+        abort(404)
+    return send_from_directory(path.parent, path.name, mimetype=asset.mime_type)
+
+
+@properties_bp.post("/<int:property_id>/apply")
+@login_required
+@tenant_required
+@limiter.limit("10 per hour")
+def apply(property_id: int):
+    property_ = db.session.get(Property, property_id) or abort(404)
+    if property_.landlord_id == current_user.id:
+        abort(403)
+    application = RentalApplication(property_id=property_id, applicant_id=current_user.id, message=clean_user_text(request.form.get("message"), 2000))
+    db.session.add(application)
+    try:
+        db.session.commit()
+        flash("Application sent.", "success")
+    except IntegrityError:
+        db.session.rollback()
+        flash("You already applied for this listing.", "info")
+    return redirect(url_for("properties.detail", property_id=property_id))

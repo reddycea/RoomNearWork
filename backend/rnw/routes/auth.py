@@ -1,221 +1,184 @@
 from __future__ import annotations
 
-from datetime import datetime
-
-from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
-from flask_jwt_extended import create_access_token, create_refresh_token, get_jwt_identity, jwt_required
+import pyotp
+from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy.exc import IntegrityError
 
-from ..extensions import db, limiter
-from ..models import LegalConsent, User
-from ..services.auth_service import (
-    TOKEN_PURPOSE_EMAIL_VERIFY,
-    TOKEN_PURPOSE_PASSWORD_RESET,
-    consume_auth_token,
-    is_login_locked,
-    password_strength_errors,
-    record_login_attempt,
-    send_password_reset_email,
-    send_verification_email,
-)
-from ..utils.validators import PROVINCES, validate_sa_id
+from backend.rnw.extensions import db, limiter
+from backend.rnw.models import User
+from backend.rnw.services.audit_service import log_action
+from backend.rnw.services.auth_service import is_locked, record_failed_login, record_successful_login
+from backend.rnw.services.auth_token_service import reset_password_with_token, send_password_reset_email, send_verification_email, verify_email_token
+from backend.rnw.utils.security import clean_user_text, password_is_strong
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
 @auth_bp.route("/register", methods=["GET", "POST"])
+@limiter.limit("3 per minute")
 def register():
-    if current_user.is_authenticated:
-        return redirect(url_for("tenant.dashboard" if current_user.role == "tenant" else "landlord.dashboard" if current_user.role == "landlord" else "admin.dashboard"))
-
     if request.method == "POST":
-        form = request.form
-        email = form.get("email", "").strip().lower()
-        password = form.get("password", "")
-        confirm = form.get("confirm_password", "")
-        role = form.get("role", "tenant")
-        id_number = form.get("id_number") or None
-
-        errors = []
-        if role not in {"tenant", "landlord"}:
-            errors.append("Invalid account type.")
-        errors.extend(password_strength_errors(password))
-        if password != confirm:
-            errors.append("Passwords do not match.")
-        if id_number and not validate_sa_id(id_number):
-            errors.append("Invalid South African ID number.")
-        if User.query.filter_by(email=email).first():
-            errors.append("Email is already registered.")
-
-        if errors:
-            for error in errors:
-                flash(error, "danger")
-            return render_template("auth/register.html", provinces=PROVINCES), 400
-
-        user = User(
-            email=email,
-            first_name=form.get("first_name", "").strip(),
-            last_name=form.get("last_name", "").strip(),
-            phone=form.get("phone", "").strip(),
-            id_number=id_number,
-            role=role,
-            province=form.get("province"),
-        )
+        email = request.form.get("email", "").strip().lower()
+        full_name = clean_user_text(request.form.get("full_name"), 160)
+        password = request.form.get("password", "")
+        if not password_is_strong(password):
+            flash("Use at least 8 characters with uppercase, lowercase and a number.", "danger")
+            return render_template("auth/register.html")
+        user = User(email=email, full_name=full_name, role="tenant", can_act_as_tenant=True, can_act_as_landlord=True)
         user.set_password(password)
         db.session.add(user)
         try:
             db.session.flush()
-            db.session.add(LegalConsent(user_id=user.id, email=user.email, consent_type="terms", ip_address=request.remote_addr, user_agent=request.headers.get("User-Agent", "")[:255]))
-            db.session.add(LegalConsent(user_id=user.id, email=user.email, consent_type="privacy", ip_address=request.remote_addr, user_agent=request.headers.get("User-Agent", "")[:255]))
-            send_verification_email(user)
+            verification_url = send_verification_email(user)
+            log_action("user_registered", "User", user.id)
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
-            flash("This email or ID number is already registered.", "danger")
-            return render_template("auth/register.html", provinces=PROVINCES), 409
-
+            flash("An account with that email already exists.", "danger")
+            return render_template("auth/register.html")
         login_user(user)
-        flash("Account created successfully. Check your email to verify your address.", "success")
-        return redirect(url_for("landlord.dashboard" if role == "landlord" else "tenant.dashboard"))
-
-    return render_template("auth/register.html", provinces=PROVINCES)
+        flash("Account created. Check your email to verify your account.", "success")
+        if verification_url:
+            flash(f"Development verification link: {verification_url}", "info")
+        return redirect(url_for("auth.choose_role"))
+    return render_template("auth/register.html")
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
-@limiter.limit("10 per minute")
+@limiter.limit("5 per minute")
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for("main.index"))
-
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
-        ip_address = request.headers.get("X-Forwarded-For", request.remote_addr)
-
-        if is_login_locked(email, ip_address):
-            flash("Too many failed login attempts. Try again later or reset your password.", "danger")
-            return render_template("auth/login.html"), 429
-
-        user = User.query.filter_by(email=email).first()
-        ok = bool(user and user.check_password(password) and user.is_active)
-        record_login_attempt(email, ip_address, ok)
-        if not ok:
-            db.session.commit()
+        user = User.query.filter_by(email=email).one_or_none()
+        if user and is_locked(user):
+            flash("Account locked temporarily after failed login attempts.", "danger")
+            return render_template("auth/login.html")
+        if not user or not user.check_password(password):
+            record_failed_login(user)
             flash("Invalid email or password.", "danger")
-            return render_template("auth/login.html"), 401
-
-        from flask import current_app
-        if current_app.config.get("EMAIL_VERIFICATION_REQUIRED", False) and not user.email_verified:
-            db.session.commit()
-            flash("Please verify your email before logging in.", "warning")
-            return redirect(url_for("auth.resend_verification"))
-
-        user.last_login = datetime.utcnow()
-        db.session.commit()
+            return render_template("auth/login.html")
         login_user(user, remember=bool(request.form.get("remember")))
-        flash("Welcome back.", "success")
-        return redirect(url_for("admin.dashboard" if user.role == "admin" else "landlord.dashboard" if user.role == "landlord" else "tenant.dashboard"))
-
+        record_successful_login(user)
+        log_action("login_success", "User", user.id)
+        db.session.commit()
+        return redirect(url_for("main.index"))
     return render_template("auth/login.html")
 
 
-@auth_bp.get("/logout")
+@auth_bp.post("/logout")
 @login_required
 def logout():
+    log_action("logout", "User", current_user.id)
+    db.session.commit()
     logout_user()
-    flash("You have been logged out.", "info")
+    flash("Signed out.", "success")
     return redirect(url_for("main.index"))
+
+
+@auth_bp.route("/choose-role", methods=["GET", "POST"])
+@login_required
+def choose_role():
+    if request.method == "POST":
+        role = request.form.get("role", "tenant")
+        try:
+            current_user.set_active_role(role)
+        except ValueError:
+            flash("That role is not available for your account.", "danger")
+            return render_template("auth/choose_role.html")
+        log_action("role_chosen", "User", current_user.id, {"role": role})
+        db.session.commit()
+        return redirect(url_for("tenant.dashboard") if role == "tenant" else url_for("landlord.dashboard"))
+    return render_template("auth/choose_role.html")
+
+
+@auth_bp.get("/verify-email-notice")
+@login_required
+def verify_email_notice():
+    return render_template("auth/verify_email_notice.html")
+
+
+@auth_bp.post("/resend-verification")
+@login_required
+@limiter.limit("3 per hour")
+def resend_verification():
+    if current_user.email_verified:
+        flash("Your email is already verified.", "info")
+        return redirect(url_for("main.index"))
+    link = send_verification_email(current_user)
+    log_action("email_verification_resent", "User", current_user.id)
+    db.session.commit()
+    flash("Verification email sent.", "success")
+    if link:
+        flash(f"Development verification link: {link}", "info")
+    return redirect(url_for("auth.verify_email_notice"))
 
 
 @auth_bp.get("/verify-email/<token>")
 def verify_email(token: str):
-    user = consume_auth_token(token, TOKEN_PURPOSE_EMAIL_VERIFY)
+    user = verify_email_token(token)
     if not user:
-        flash("This email verification link is invalid or expired.", "danger")
+        flash("That verification link is invalid or expired.", "danger")
         return redirect(url_for("auth.login"))
-    user.email_verified_at = datetime.utcnow()
+    log_action("email_verified", "User", user.id)
     db.session.commit()
-    flash("Email address verified successfully.", "success")
+    flash("Email verified. You can now use all Room Near Work features.", "success")
     return redirect(url_for("auth.login"))
 
 
-@auth_bp.route("/resend-verification", methods=["GET", "POST"])
-def resend_verification():
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        user = User.query.filter_by(email=email).first()
-        if user and not user.email_verified:
-            send_verification_email(user)
-            db.session.commit()
-        flash("If the address exists and is not verified, a verification email has been sent.", "info")
-        return redirect(url_for("auth.login"))
-    return render_template("auth/resend_verification.html")
-
-
 @auth_bp.route("/forgot-password", methods=["GET", "POST"])
+@limiter.limit("3 per hour")
 def forgot_password():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
-        user = User.query.filter_by(email=email).first()
-        if user and user.is_active:
-            send_password_reset_email(user)
+        user = User.query.filter_by(email=email).one_or_none()
+        link = None
+        if user:
+            link = send_password_reset_email(user)
+            log_action("password_reset_requested", "User", user.id)
             db.session.commit()
-        flash("If that email exists, a reset link has been sent.", "info")
+        flash("If an account exists for that email, a reset link has been sent.", "success")
+        if link:
+            flash(f"Development reset link: {link}", "info")
         return redirect(url_for("auth.login"))
     return render_template("auth/forgot_password.html")
 
 
 @auth_bp.route("/reset-password/<token>", methods=["GET", "POST"])
+@limiter.limit("5 per hour")
 def reset_password(token: str):
     if request.method == "POST":
-        user = consume_auth_token(token, TOKEN_PURPOSE_PASSWORD_RESET)
-        if not user:
-            flash("This password reset link is invalid or expired.", "danger")
-            return redirect(url_for("auth.forgot_password"))
         password = request.form.get("password", "")
-        confirm = request.form.get("confirm_password", "")
-        errors = password_strength_errors(password)
-        if password != confirm:
-            errors.append("Passwords do not match.")
-        if errors:
-            for error in errors:
-                flash(error, "danger")
-            return render_template("auth/reset_password.html", token=token), 400
-        user.set_password(password)
+        if not password_is_strong(password):
+            flash("Use at least 8 characters with uppercase, lowercase and a number.", "danger")
+            return render_template("auth/reset_password.html")
+        user = reset_password_with_token(token, password)
+        if not user:
+            db.session.rollback()
+            flash("That reset link is invalid or expired.", "danger")
+            return redirect(url_for("auth.forgot_password"))
+        log_action("password_reset_completed", "User", user.id)
         db.session.commit()
-        flash("Password updated. You can now log in.", "success")
+        flash("Password updated. Please log in.", "success")
         return redirect(url_for("auth.login"))
-    return render_template("auth/reset_password.html", token=token)
+    return render_template("auth/reset_password.html")
 
 
-@auth_bp.post("/api/token")
-@limiter.limit("10 per minute")
-def api_token():
-    data = request.get_json(silent=True) or {}
-    email = str(data.get("email", "")).lower()
-    ip_address = request.headers.get("X-Forwarded-For", request.remote_addr)
-    if is_login_locked(email, ip_address):
-        return jsonify({"message": "Too many failed login attempts"}), 429
-    user = User.query.filter_by(email=email).first()
-    ok = bool(user and user.check_password(data.get("password", "")) and user.is_active)
-    record_login_attempt(email, ip_address, ok)
-    if not ok:
+@auth_bp.route("/2fa/setup", methods=["GET", "POST"])
+@login_required
+def two_factor_setup():
+    if not current_user.two_factor_secret:
+        current_user.two_factor_secret = pyotp.random_base32()
         db.session.commit()
-        return jsonify({"message": "Invalid credentials"}), 401
-    user.last_login = datetime.utcnow()
-    db.session.commit()
-    identity = str(user.id)
-    return jsonify({
-        "access_token": create_access_token(identity=identity, additional_claims={"role": user.role}),
-        "refresh_token": create_refresh_token(identity=identity),
-        "user": user.to_dict(),
-    })
-
-
-@auth_bp.post("/api/refresh")
-@jwt_required(refresh=True)
-def refresh_token():
-    identity = get_jwt_identity()
-    user = db.session.get(User, int(identity))
-    return jsonify({"access_token": create_access_token(identity=identity, additional_claims={"role": user.role if user else None})})
+    otp_uri = pyotp.totp.TOTP(current_user.two_factor_secret).provisioning_uri(name=current_user.email, issuer_name="Room Near Work")
+    if request.method == "POST":
+        token = request.form.get("token", "")
+        if pyotp.TOTP(current_user.two_factor_secret).verify(token):
+            current_user.two_factor_enabled = True
+            log_action("admin_2fa_enabled", "User", current_user.id)
+            db.session.commit()
+            flash("Two-factor authentication enabled.", "success")
+            return redirect(url_for("admin.dashboard"))
+        flash("Invalid code.", "danger")
+    return render_template("auth/two_factor_setup.html", otp_uri=otp_uri)

@@ -1,276 +1,83 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 
-from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_from_directory, url_for
-from flask_login import current_user
-from sqlalchemy import func
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask_login import current_user, login_required
 
-from ..extensions import db
-from ..models import BillingInvoice, LandlordVerification, ListingReport, PaymentWebhookLog, Property, PropertyReview, RentalApplication, SubscriptionPlan, SupportTicket, User, UserSubscription
-from ..services.audit_service import log_admin_action
-from ..services.billing_service import cancel_subscription, extend_subscription
-from ..services.subscription_service import get_available_plans, subscribe_user
-from ..utils.decorators import roles_required
-from ..utils.security import private_relative_path
+from backend.rnw.extensions import db
+from backend.rnw.models import ListingReport, Property, PropertyAsset, SupportTicket, User
+from backend.rnw.services.audit_service import log_action
+from backend.rnw.utils.decorators import admin_required, two_factor_required
+from backend.rnw.utils.security import clean_user_text
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
 @admin_bp.get("/dashboard")
-@roles_required("admin")
+@login_required
+@admin_required
+@two_factor_required
 def dashboard():
-    revenue = db.session.query(func.coalesce(func.sum(BillingInvoice.amount), 0)).select_from(BillingInvoice).filter(BillingInvoice.status == "paid").scalar() or 0
-    metrics = {
+    counts = {
         "users": User.query.count(),
-        "landlords": User.query.filter_by(role="landlord").count(),
-        "tenants": User.query.filter_by(role="tenant").count(),
-        "active_subscriptions": UserSubscription.query.filter_by(status="active").count(),
-        "monthly_revenue_zar": round(float(revenue), 2),
-        "pending_properties": Property.query.filter_by(status="pending").count(),
-        "approved_properties": Property.query.filter_by(status="approved").count(),
-        "pending_applications": RentalApplication.query.filter_by(status="pending").count(),
-        "pending_reviews": PropertyReview.query.filter_by(status="pending").count(),
-        "open_reports": ListingReport.query.filter_by(status="open").count(),
-        "open_support": SupportTicket.query.filter_by(status="open").count(),
+        "pending_listings": Property.query.filter_by(status="under_review").count(),
+        "pending_documents": PropertyAsset.query.filter(PropertyAsset.is_private.is_(True), PropertyAsset.review_status == "pending").count(),
+        "reports": ListingReport.query.filter_by(status="open").count(),
+        "tickets": SupportTicket.query.filter_by(status="open").count(),
     }
-    pending_properties = Property.query.filter_by(status="pending").order_by(Property.created_at.desc()).limit(10).all()
-    pending_verifications = LandlordVerification.query.filter_by(status="pending").order_by(LandlordVerification.created_at.desc()).limit(10).all()
-    return render_template("admin/dashboard.html", metrics=metrics, pending_properties=pending_properties, pending_verifications=pending_verifications)
-
-
-@admin_bp.get("/users")
-@roles_required("admin")
-def users():
-    all_users = User.query.order_by(User.created_at.desc()).all()
-    return render_template("admin/users.html", users=all_users)
-
-
-@admin_bp.post("/users/<int:user_id>/<action>")
-@roles_required("admin")
-def user_action(user_id: int, action: str):
-    user = db.session.get(User, user_id) or abort(404)
-    if user.id == current_user.id:
-        flash("You cannot change your own account status here.", "warning")
-        return redirect(url_for("admin.users"))
-    if action == "activate":
-        user.is_active = True
-    elif action == "suspend":
-        user.is_active = False
-    elif action == "verify-email":
-        user.email_verified_at = datetime.utcnow()
-    else:
-        abort(400)
-    log_admin_action(action, "user", user.id)
-    db.session.commit()
-    flash("User updated.", "success")
-    return redirect(url_for("admin.users"))
-
-
-@admin_bp.get("/properties")
-@roles_required("admin")
-def properties():
-    status = request.args.get("status")
-    query = Property.query
-    if status:
-        query = query.filter_by(status=status)
-    return render_template("admin/properties.html", properties=query.order_by(Property.created_at.desc()).all())
-
-
-@admin_bp.post("/properties/<int:property_id>/<action>")
-@roles_required("admin")
-def property_action(property_id: int, action: str):
-    prop = db.session.get(Property, property_id) or abort(404)
-    if action not in {"approve", "reject"}:
-        abort(400)
-    prop.status = "approved" if action == "approve" else "rejected"
-    log_admin_action(action, "property", prop.id, prop.title)
-    db.session.commit()
-    flash(f"Property {prop.status}.", "success")
-    return redirect(url_for("admin.properties"))
+    return render_template("admin/dashboard.html", counts=counts)
 
 
 @admin_bp.get("/verifications")
-@roles_required("admin")
+@login_required
+@admin_required
+@two_factor_required
 def verifications():
-    items = LandlordVerification.query.order_by(LandlordVerification.created_at.desc()).all()
-    return render_template("admin/verifications.html", verifications=items)
+    listings = Property.query.filter(Property.status.in_(["under_review", "rejected"])).order_by(Property.created_at.asc()).all()
+    documents = PropertyAsset.query.filter(PropertyAsset.is_private.is_(True)).order_by(PropertyAsset.created_at.desc()).all()
+    return render_template("admin/verifications.html", listings=listings, documents=documents)
 
 
-@admin_bp.post("/verifications/<int:verification_id>/<action>")
-@roles_required("admin")
-def verification_action(verification_id: int, action: str):
-    verification = db.session.get(LandlordVerification, verification_id) or abort(404)
-    if action == "verify":
-        verification.status = "verified"
-        verification.user.is_verified = True
-        verification.verified_by = current_user.id
-        verification.verified_at = datetime.utcnow()
-    elif action == "reject":
-        verification.status = "rejected"
-        verification.rejection_reason = request.form.get("rejection_reason")
-        verification.user.is_verified = False
+@admin_bp.post("/properties/<int:property_id>/<action>")
+@login_required
+@admin_required
+@two_factor_required
+def moderate_property(property_id: int, action: str):
+    if action not in {"approve", "reject"}:
+        abort(404)
+    prop = db.session.get(Property, property_id) or abort(404)
+    note = clean_user_text(request.form.get("note"), 1000)
+    if action == "approve":
+        prop.status = "available"
+        prop.is_active = True
+        prop.listing_verified = prop.documents_approved()
+        prop.verified_at = datetime.utcnow() if prop.listing_verified else None
+        prop.verified_by_id = current_user.id if prop.listing_verified else None
+        prop.status_reason = None
     else:
-        abort(400)
-    log_admin_action(action, "landlord_verification", verification.id)
+        prop.status = "rejected"
+        prop.is_active = False
+        prop.status_reason = note or "Rejected by admin."
+    log_action(f"listing_{action}d", "Property", prop.id, {"note": note})
     db.session.commit()
-    flash("Verification updated.", "success")
+    flash(f"Listing {action}d.", "success")
     return redirect(url_for("admin.verifications"))
 
 
-@admin_bp.get("/private-files/<path:relative_path>")
-@roles_required("admin")
-def private_file(relative_path: str):
-    if ".." in Path(relative_path).parts:
+@admin_bp.post("/assets/<int:asset_id>/<action>")
+@login_required
+@admin_required
+@two_factor_required
+def moderate_asset(asset_id: int, action: str):
+    if action not in {"approve", "reject"}:
         abort(404)
-    private_root = current_app.config["UPLOAD_FOLDER_PATH"] / "private"
-    return send_from_directory(private_root, relative_path, as_attachment=True)
-
-
-@admin_bp.get("/billing")
-@roles_required("admin")
-def billing():
-    plans = get_available_plans()
-    subscriptions = UserSubscription.query.order_by(UserSubscription.created_at.desc()).limit(100).all()
-    invoices = BillingInvoice.query.order_by(BillingInvoice.created_at.desc()).limit(100).all()
-    revenue = db.session.query(func.coalesce(func.sum(BillingInvoice.amount), 0)).select_from(BillingInvoice).filter(BillingInvoice.status == "paid").scalar() or 0
-    metrics = {
-        "paid_invoices": BillingInvoice.query.filter_by(status="paid").count(),
-        "pending_invoices": BillingInvoice.query.filter_by(status="pending").count(),
-        "active_subscriptions": UserSubscription.query.filter_by(status="active").count(),
-        "revenue_zar": round(float(revenue), 2),
-    }
-    return render_template("admin/billing.html", plans=plans, subscriptions=subscriptions, invoices=invoices, metrics=metrics)
-
-
-@admin_bp.post("/billing/users/<int:user_id>/activate")
-@roles_required("admin")
-def activate_user_subscription(user_id: int):
-    user = db.session.get(User, user_id) or abort(404)
-    plan = db.session.get(SubscriptionPlan, int(request.form.get("plan_id") or 0)) or abort(404)
-    months = max(1, min(int(request.form.get("months") or 1), 24))
-    if plan.role != user.role:
-        flash("Selected plan does not match the user's role.", "danger")
-        return redirect(url_for("admin.billing"))
-    subscription = subscribe_user(user, plan, provider="admin", reference=f"admin_manual_{user.id}_{int(datetime.utcnow().timestamp())}", months=months)
-    log_admin_action("activate_subscription", "subscription", user.id, plan.name)
+    asset = db.session.get(PropertyAsset, asset_id) or abort(404)
+    asset.review_status = "approved" if action == "approve" else "rejected"
+    asset.review_note = clean_user_text(request.form.get("note"), 1000)
+    asset.reviewed_by_id = current_user.id
+    asset.reviewed_at = datetime.utcnow()
+    log_action(f"document_{action}d", "PropertyAsset", asset.id, {"note": asset.review_note})
     db.session.commit()
-    flash(f"Manual subscription activated for {user.full_name}: {subscription.plan.name}.", "success")
-    return redirect(url_for("admin.billing"))
-
-
-@admin_bp.post("/billing/subscriptions/<int:subscription_id>/<action>")
-@roles_required("admin")
-def subscription_action(subscription_id: int, action: str):
-    subscription = db.session.get(UserSubscription, subscription_id) or abort(404)
-    if action == "cancel":
-        cancel_subscription(subscription)
-    elif action == "extend":
-        months = max(1, min(int(request.form.get("months") or 1), 24))
-        extend_subscription(subscription, months)
-    elif action == "reactivate":
-        subscription.status = "active"
-        subscription.auto_renew = True
-    else:
-        abort(400)
-    log_admin_action(action, "subscription", subscription.id)
-    db.session.commit()
-    flash("Subscription updated.", "success")
-    return redirect(url_for("admin.billing"))
-
-
-def private_file_link(private_url: str | None) -> str | None:
-    relative = private_relative_path(private_url)
-    return url_for("admin.private_file", relative_path=relative) if relative else None
-
-
-
-@admin_bp.get("/reviews")
-@roles_required("admin")
-def reviews():
-    status = request.args.get("status")
-    query = PropertyReview.query
-    if status:
-        query = query.filter_by(status=status)
-    return render_template("admin/reviews.html", reviews=query.order_by(PropertyReview.created_at.desc()).all())
-
-
-@admin_bp.post("/reviews/<int:review_id>/<action>")
-@roles_required("admin")
-def review_action(review_id: int, action: str):
-    review = db.session.get(PropertyReview, review_id) or abort(404)
-    if action == "approve":
-        review.approve(current_user.id)
-    elif action == "reject":
-        review.reject(request.form.get("rejection_reason"), current_user.id)
-    else:
-        abort(400)
-    log_admin_action(action, "review", review.id)
-    db.session.commit()
-    flash("Review moderated.", "success")
-    return redirect(url_for("admin.reviews"))
-
-
-@admin_bp.get("/reports")
-@roles_required("admin")
-def reports():
-    status = request.args.get("status")
-    query = ListingReport.query
-    if status:
-        query = query.filter_by(status=status)
-    return render_template("admin/reports.html", reports=query.order_by(ListingReport.created_at.desc()).all())
-
-
-@admin_bp.post("/reports/<int:report_id>/<action>")
-@roles_required("admin")
-def report_action(report_id: int, action: str):
-    report = db.session.get(ListingReport, report_id) or abort(404)
-    if action == "investigate":
-        report.status = "investigating"
-        report.admin_notes = request.form.get("admin_notes")
-    elif action in {"resolve", "dismiss"}:
-        report.close("resolved" if action == "resolve" else "dismissed", current_user.id, request.form.get("admin_notes"))
-    else:
-        abort(400)
-    log_admin_action(action, "listing_report", report.id)
-    db.session.commit()
-    flash("Listing report updated.", "success")
-    return redirect(url_for("admin.reports"))
-
-
-@admin_bp.get("/support")
-@roles_required("admin")
-def support_tickets():
-    status = request.args.get("status")
-    query = SupportTicket.query
-    if status:
-        query = query.filter_by(status=status)
-    return render_template("admin/support.html", tickets=query.order_by(SupportTicket.created_at.desc()).all())
-
-
-@admin_bp.route("/support/<int:ticket_id>", methods=["GET", "POST"])
-@roles_required("admin")
-def support_ticket(ticket_id: int):
-    ticket = db.session.get(SupportTicket, ticket_id) or abort(404)
-    if request.method == "POST":
-        response = request.form.get("admin_response", "").strip()
-        status = request.form.get("status", "pending_user")
-        if status not in {"open", "pending_user", "resolved", "closed"}:
-            status = "pending_user"
-        if not response:
-            flash("Write a response before updating the ticket.", "danger")
-        else:
-            ticket.respond(current_user.id, response, status)
-            log_admin_action("respond_support", "support_ticket", ticket.id)
-            db.session.commit()
-            flash("Support ticket updated.", "success")
-            return redirect(url_for("admin.support_tickets"))
-    return render_template("admin/support_detail.html", ticket=ticket)
-
-
-@admin_bp.get("/webhooks")
-@roles_required("admin")
-def webhooks():
-    logs = PaymentWebhookLog.query.order_by(PaymentWebhookLog.created_at.desc()).limit(200).all()
-    return render_template("admin/webhooks.html", logs=logs)
+    flash(f"Document {action}d.", "success")
+    return redirect(url_for("admin.verifications"))
