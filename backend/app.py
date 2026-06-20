@@ -1,6 +1,6 @@
 from backend.rnw import create_app
 
-app = create_app()
+__all__ = ["create_app"]
 
 if __name__ == "__main__":
-    app.run()
+    create_app().run()
