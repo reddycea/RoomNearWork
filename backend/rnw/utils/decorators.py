@@ -1,44 +1,66 @@
+from __future__ import annotations
+
 from functools import wraps
 
 from flask import abort, flash, redirect, url_for
-from flask_login import current_user, login_required
+from flask_login import current_user
+
+from backend.rnw.extensions import db
 
 
-def roles_required(*roles: str):
-    """Require login and one of the listed roles."""
-    def decorator(func):
-        @wraps(func)
-        @login_required
-        def wrapper(*args, **kwargs):
-            if not current_user.is_authenticated or current_user.role not in roles:
-                abort(403)
-            return func(*args, **kwargs)
-        return wrapper
+def role_required(role: str):
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for("auth.login"))
+            if current_user.role != role:
+                if hasattr(current_user, "can_use_role") and current_user.can_use_role(role):
+                    current_user.set_active_role(role)
+                    db.session.commit()
+                else:
+                    abort(403)
+            return view(*args, **kwargs)
+        return wrapped
     return decorator
 
 
-def subscription_required(func):
-    """Require an active subscription for tenant/landlord SaaS actions."""
-    @wraps(func)
-    @login_required
-    def wrapper(*args, **kwargs):
-        if current_user.role == "admin" or current_user.has_active_subscription():
-            return func(*args, **kwargs)
-        flash("Please activate your RNW monthly subscription before using this feature.", "info")
-        return redirect(url_for("billing.plans"))
-    return wrapper
+def tenant_required(view):
+    return role_required("tenant")(view)
 
 
-def email_verified_required(func):
-    """Require verified email only when EMAIL_VERIFICATION_REQUIRED is enabled."""
-    @wraps(func)
-    @login_required
-    def wrapper(*args, **kwargs):
-        from flask import current_app
-        if not current_app.config.get("EMAIL_VERIFICATION_REQUIRED", False):
-            return func(*args, **kwargs)
-        if current_user.email_verified or current_user.role == "admin":
-            return func(*args, **kwargs)
-        flash("Please verify your email address before using this feature.", "warning")
-        return redirect(url_for("auth.resend_verification"))
-    return wrapper
+def landlord_required(view):
+    return role_required("landlord")(view)
+
+
+def admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for("auth.login"))
+        if not getattr(current_user, "is_admin", False):
+            abort(403)
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def email_verified_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for("auth.login"))
+        if not getattr(current_user, "email_verified", False):
+            flash("Please verify your email before continuing.", "warning")
+            return redirect(url_for("auth.verify_email_notice"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def two_factor_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if getattr(current_user, "is_admin", False) and not getattr(current_user, "two_factor_enabled", False):
+            flash("Please enable admin two-factor authentication before continuing.", "warning")
+            return redirect(url_for("auth.two_factor_setup"))
+        return view(*args, **kwargs)
+    return wrapped
