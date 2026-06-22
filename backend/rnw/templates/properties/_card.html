@@ -1,0 +1,19 @@
+<article class="property-card">
+  <a href="{{ url_for('properties.detail', property_id=property.id) }}" class="card-image">
+    {% set photo = property.primary_photo() %}
+    {% if photo %}<img src="{{ url_for('properties.media', asset_id=photo.id) }}" alt="{{ property.title }}">{% else %}<span class="placeholder-image">RNW</span>{% endif %}
+  </a>
+  <div class="card-body">
+    <div class="card-top"><strong>R{{ property.rent_amount }}</strong><span>{{ property.quality_score }}%</span></div>
+    <h3><a href="{{ url_for('properties.detail', property_id=property.id) }}">{{ property.title }}</a></h3>
+    <p>{{ property.public_address() }}</p>
+    {% if property.commute_summary %}<p class="commute">{{ property.commute_summary }} from {{ property.commute_area }}</p>{% endif %}
+    {% if property.taxi_rank_estimate %}<div class="taxi-estimate">Taxi: about {{ property.taxi_rank_estimate.estimated_total_minutes }} min via {{ property.taxi_rank_estimate.rank_name }} • R{{ property.taxi_rank_estimate.estimated_fare_min }}–R{{ property.taxi_rank_estimate.estimated_fare_max }}</div>{% endif %}
+    {% if property.commute_modes %}<div class="commute-stack">{% for mode in property.commute_modes %}<span>{{ mode.label }}: {{ mode.duration_min or '—' }} min • {{ mode.distance_km or '—' }} km</span>{% endfor %}</div>{% endif %}
+    <div class="tags">
+      {% if property.average_rating() %}<span>★ {{ property.average_rating() }}</span>{% endif %}{% if property.transport_access %}<span>Transport</span>{% endif %}
+      {% if property.furnished %}<span>Furnished</span>{% endif %}
+      {% if property.listing_verified %}<span>Verified</span>{% endif %}
+    </div>
+  </div>
+</article>

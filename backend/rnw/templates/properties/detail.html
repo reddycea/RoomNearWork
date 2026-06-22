@@ -1,25 +1,66 @@
 {% extends 'base.html' %}
-{% block title %}{{ property.title }} — RNW{% endblock %}
+{% block title %}{{ property.title }} — Room Near Work{% endblock %}
+{% block head %}<script type="application/ld+json">{{ json_ld|safe }}</script>{% endblock %}
 {% block content %}
-<section class="panel">
-  <p class="eyebrow">{{ property.city }}, {{ property.province }}</p>
-  <h1>{{ property.title }}</h1>
-  <p class="price">R{{ '%.0f'|format(property.price) }} pm</p>
-  <div class="details">
-    <div><dt>Deposit</dt><dd>{% if property.deposit_amount %}R{{ '%.0f'|format(property.deposit_amount) }}{% else %}Not specified{% endif %}</dd></div>
-    <div><dt>Bedrooms</dt><dd>{{ property.bedrooms }}</dd></div>
-    <div><dt>Bathrooms</dt><dd>{{ property.bathrooms }}</dd></div>
-    <div><dt>Parking</dt><dd>{{ property.parking }}</dd></div>
-    <div><dt>Transport</dt><dd>{{ property.transport_access or 'Not specified' }}</dd></div>
-    <div><dt>Furnished</dt><dd>{{ 'Yes' if property.furnished else 'No' }}</dd></div>
+<section class="detail-hero">
+  <div class="detail-gallery">
+    {% set photos = property.photo_assets() %}
+    <div class="detail-image">
+      {% if photos %}<img src="{{ url_for('properties.media', asset_id=photos[0].id) }}" alt="{{ property.title }}">
+      {% elif property.image_url %}<img src="{{ property.image_url }}" alt="{{ property.title }}">
+      {% else %}<span>RNW</span>{% endif %}
+    </div>
+    {% if photos|length > 1 %}
+      <div class="thumb-grid">
+        {% for photo in photos[1:5] %}<img src="{{ url_for('properties.media', asset_id=photo.id) }}" alt="{{ property.title }} photo {{ loop.index + 1 }}">{% endfor %}
+      </div>
+    {% endif %}
   </div>
-  <p>{{ property.description }}</p>
-  {% if current_user.is_authenticated and current_user.role == 'tenant' %}
-    <form class="inline-form" method="post" action="{{ url_for('tenant.save_property', property_id=property.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Save</button></form>
-    <a class="button" href="{{ url_for('tenant.apply', property_id=property.id) }}">Apply now</a>
-  {% endif %}
-  {% if current_user.is_authenticated and (current_user.id == property.landlord_id or current_user.role == 'admin') %}
-    <a class="button" href="{{ url_for('properties.edit', property_id=property.id) }}">Edit</a>
-  {% endif %}
+  <div class="detail-panel">
+    <p class="eyebrow">{{ property.public_location() }}</p>
+    <h1>{{ property.title }}</h1>
+    <p class="price">R{{ property.rent_amount }} / month</p>
+    <div class="tags"><span>{{ property.bedrooms }} bed</span><span>{{ property.bathrooms }} bath</span><span>Quality {{ property.quality_score }}%</span>{% if property.average_rating() %}<span>★ {{ property.average_rating() }} from {{ property.review_count() }} review{{ '' if property.review_count() == 1 else 's' }}</span>{% endif %}{% if property.transport_access %}<span>Transport nearby</span>{% endif %}{% if property.has_required_documents() %}<span>Proof docs uploaded</span>{% endif %}</div>
+    <p>{{ property.description }}</p>
+    <p><strong>Public location:</strong> {{ property.public_address() }}. Exact address is protected and shared only after approval.</p>
+    {% if property.nearest_transport %}<p><strong>Nearest transport:</strong> {{ property.nearest_transport }}</p>{% endif %}
+    {% if property.commute_notes %}<p><strong>Commute notes:</strong> {{ property.commute_notes }}</p>{% endif %}
+    {% if current_user.is_authenticated and (current_user.is_admin or current_user.id == property.landlord_id) %}
+      <details class="admin-details"><summary>Private listing documents</summary>
+        <ul>
+          {% for asset in property.private_document_assets() %}
+            <li><a href="{{ url_for('properties.media', asset_id=asset.id) }}">{{ asset.kind|replace('_', ' ')|title }} — {{ asset.original_filename }}</a></li>
+          {% else %}<li>No private documents uploaded.</li>{% endfor %}
+        </ul>
+      </details>
+    {% endif %}
+    {% if current_user.is_authenticated and current_user.role == 'tenant' %}
+      <form method="post" action="{{ url_for('marketplace.start_message', property_id=property.id) }}" class="stacked-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><textarea name="body">Hi, I am interested in this rental.</textarea><button>Message landlord</button></form>
+      <a class="button secondary" href="{{ url_for('marketplace.request_viewing', property_id=property.id) }}">Request viewing</a>
+      {% if not user_review %}<a class="button secondary" href="{{ url_for('marketplace.new_review', property_id=property.id) }}">Write review</a>{% else %}<a class="button secondary" href="{{ url_for('marketplace.new_review', property_id=property.id) }}">Edit your review</a>{% endif %}
+      <form method="post" action="{{ url_for('properties.apply', property_id=property.id) }}" class="stacked-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><textarea name="message" placeholder="Application note"></textarea><button>Apply</button></form>
+    {% elif not current_user.is_authenticated %}
+      <a class="button" href="{{ url_for('auth.login') }}">Log in to contact</a>
+    {% endif %}
+    <a class="report-link" href="{{ url_for('trust.report_listing', property_id=property.id) }}">Report this listing</a>
+  </div>
+</section>
+<section class="section tenant-reviews">
+  <div class="section-head">
+    <div><p class="eyebrow">Tenant reviews</p><h2>What tenants say</h2></div>
+    {% if property.average_rating() %}<strong class="review-score">★ {{ property.average_rating() }}</strong>{% endif %}
+  </div>
+  <div class="review-grid">
+    {% for review in approved_reviews %}
+      <article class="review-card">
+        <div class="review-stars">{% for _ in range(review.rating) %}★{% endfor %}</div>
+        <h3>{{ review.title }}</h3>
+        <p>{{ review.public_comment }}</p>
+        <small>By {{ review.tenant.full_name }} • Accuracy {{ review.accuracy_rating or '-' }}/5 • Safety {{ review.safety_rating or '-' }}/5 • Commute {{ review.commute_rating or '-' }}/5</small>
+      </article>
+    {% else %}
+      <p>No tenant reviews yet. Reviews appear after moderation.</p>
+    {% endfor %}
+  </div>
 </section>
 {% endblock %}
