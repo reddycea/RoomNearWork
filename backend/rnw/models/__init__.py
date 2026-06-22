@@ -8,6 +8,9 @@ from .marketplace import (
     ConversationThread,
     EmailVerificationToken,
     PasswordResetToken,
+    PlacesSession,
+    RentalReview,
+    TaxiRank,
     SavedSearch,
     UserAuditLog,
     ViewingAppointment,
@@ -32,4 +35,7 @@ __all__ = [
     "UserAuditLog",
     "EmailVerificationToken",
     "PasswordResetToken",
+    "PlacesSession",
+    "RentalReview",
+    "TaxiRank",
 ]

@@ -54,6 +54,7 @@ class Property(TimestampMixin, db.Model):
     verified_by = db.relationship("User", foreign_keys=[verified_by_id])
     applications = db.relationship("RentalApplication", back_populates="property", lazy="dynamic")
     assets = db.relationship("PropertyAsset", back_populates="property", cascade="all, delete-orphan", order_by="PropertyAsset.is_primary.desc(), PropertyAsset.created_at")
+    reviews = db.relationship("RentalReview", back_populates="property", cascade="all, delete-orphan", lazy="dynamic")
 
     __table_args__ = (
         Index("ix_properties_search", "status", "is_active", "city", "province", "rent_amount"),
@@ -76,6 +77,18 @@ class Property(TimestampMixin, db.Model):
 
     def private_document_assets(self) -> list["PropertyAsset"]:
         return [asset for asset in self.assets if asset.kind in {"proof_registration", "id_document"}]
+
+    def approved_reviews(self):
+        return self.reviews.filter_by(status="approved").order_by(db.text("created_at DESC")).all()
+
+    def average_rating(self) -> float | None:
+        reviews = self.reviews.filter_by(status="approved").all()
+        if not reviews:
+            return None
+        return round(sum(review.rating for review in reviews) / len(reviews), 1)
+
+    def review_count(self) -> int:
+        return self.reviews.filter_by(status="approved").count()
 
     def has_required_documents(self) -> bool:
         kinds = {asset.kind for asset in self.assets}

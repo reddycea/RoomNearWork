@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import hashlib
 import secrets
 from datetime import datetime, timedelta
@@ -146,3 +147,104 @@ class PasswordResetToken(TimestampMixin, db.Model):
 
     def is_valid(self) -> bool:
         return self.used_at is None and self.expires_at > datetime.utcnow()
+
+
+class PlacesSession(TimestampMixin, db.Model):
+    """Short-lived Google Places autocomplete session for cost control and address confirmation.
+
+    The raw token is sent to the browser and Google. We store only a hash so leaked DB dumps
+    do not expose active session tokens. Sessions are intentionally lightweight and can be
+    cleaned up by a scheduled job.
+    """
+
+    __tablename__ = "places_sessions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    purpose = db.Column(db.String(80), default="workplace_search", nullable=False)
+    selected_place_id = db.Column(db.String(255))
+    selected_description = db.Column(db.String(500))
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime)
+
+    user = db.relationship("User")
+
+    @classmethod
+    def issue(cls, user_id: int | None = None, purpose: str = "workplace_search", minutes: int = 5) -> tuple["PlacesSession", str]:
+        raw = secrets.token_urlsafe(24)
+        session = cls(
+            user_id=user_id,
+            token_hash=hash_token(raw),
+            purpose=purpose,
+            expires_at=datetime.utcnow() + timedelta(minutes=minutes),
+        )
+        return session, raw
+
+    def mark_used(self, place_id: str | None, description: str | None = None) -> None:
+        self.selected_place_id = place_id
+        self.selected_description = description
+        self.used_at = datetime.utcnow()
+
+    def is_valid(self) -> bool:
+        return self.expires_at > datetime.utcnow()
+
+
+class TaxiRank(TimestampMixin, db.Model):
+    """Simple RNW-owned taxi-rank dataset for South African commute estimates.
+
+    Google has no dedicated minibus taxi mode, so this table lets RNW build local
+    transport intelligence over time. It can be seeded manually or crowdsourced later.
+    """
+
+    __tablename__ = "taxi_ranks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(160), nullable=False)
+    suburb = db.Column(db.String(120), index=True)
+    city = db.Column(db.String(120), index=True)
+    province = db.Column(db.String(120), index=True)
+    latitude = db.Column(db.Float, nullable=False, index=True)
+    longitude = db.Column(db.Float, nullable=False, index=True)
+    notes = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=True, nullable=False, index=True)
+
+
+class RentalReview(TimestampMixin, db.Model):
+    """Tenant review of a rental/listing after a viewing, application, or completed stay."""
+
+    __tablename__ = "rental_reviews"
+
+    id = db.Column(db.Integer, primary_key=True)
+    property_id = db.Column(db.Integer, db.ForeignKey("properties.id"), nullable=False, index=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    landlord_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    rating = db.Column(db.Integer, nullable=False)
+    accuracy_rating = db.Column(db.Integer)
+    safety_rating = db.Column(db.Integer)
+    commute_rating = db.Column(db.Integer)
+    landlord_communication_rating = db.Column(db.Integer)
+    title = db.Column(db.String(140), nullable=False)
+    comment = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(40), default="pending", nullable=False, index=True)
+    admin_note = db.Column(db.Text)
+    reviewed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    reviewed_at = db.Column(db.DateTime)
+
+    property = db.relationship("Property", back_populates="reviews")
+    tenant = db.relationship("User", foreign_keys=[tenant_id])
+    landlord = db.relationship("User", foreign_keys=[landlord_id])
+    reviewed_by = db.relationship("User", foreign_keys=[reviewed_by_id])
+
+    __table_args__ = (
+        db.UniqueConstraint("property_id", "tenant_id", name="uq_rental_review_property_tenant"),
+        db.CheckConstraint("rating >= 1 AND rating <= 5", name="ck_rental_reviews_rating_range"),
+    )
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("status", "pending")
+        super().__init__(**kwargs)
+
+    @builtins.property
+    def public_comment(self) -> str:
+        return self.comment or ""

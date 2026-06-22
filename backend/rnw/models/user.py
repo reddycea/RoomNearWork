@@ -34,7 +34,12 @@ class User(UserMixin, TimestampMixin, db.Model):
     two_factor_secret = db.Column(db.String(64))
     two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
 
-    properties = db.relationship("Property", back_populates="landlord", lazy="dynamic")
+    properties = db.relationship(
+        "Property",
+        back_populates="landlord",
+        foreign_keys="Property.landlord_id",
+        lazy="dynamic",
+    )
     applications = db.relationship("RentalApplication", back_populates="applicant", lazy="dynamic")
 
     def set_password(self, password: str) -> None:
