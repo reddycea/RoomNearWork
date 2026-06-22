@@ -5,7 +5,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 INSTANCE_DIR = BASE_DIR / "instance"
-UPLOAD_DIR = BASE_DIR / "uploads"
+UPLOAD_DIR = Path(os.getenv("UPLOAD_FOLDER_PATH", str(BASE_DIR / "uploads")))
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -65,7 +65,7 @@ class BaseConfig:
     RUN_JOBS_INLINE = env_bool("RUN_JOBS_INLINE", True)
 
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_UPLOAD_MB", "12")) * 1024 * 1024
-    UPLOAD_FOLDER_PATH = UPLOAD_DIR
+    UPLOAD_FOLDER_PATH = Path(os.getenv("UPLOAD_FOLDER_PATH", str(UPLOAD_DIR)))
     LOG_FILE = os.getenv("LOG_FILE", str(INSTANCE_DIR / "rnw.log"))
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
