@@ -1,3 +1,7 @@
+# RoomNearWork
+
+Room Near Work — blue/white production-style rental marketplace.
+
 # Room Near Work
 
 Room Near Work is a blue-and-white, app-like rental marketplace for helping tenants find rooms and apartments close to work, transport and opportunity.
@@ -62,3 +66,26 @@ Enable Geocoding API, Places API and Routes API in Google Cloud.
 - Use HTTPS and set secure cookies.
 - Review legal pages with a qualified legal professional before launch.
 - Add virus scanning and private object storage for uploaded documents before handling real ID documents.
+
+
+## Render deployment
+
+This package includes `render.yaml`, `.env.render.example`, and `docs/RENDER_DEPLOY.md`. Push to GitHub, then create a Render Blueprint from the repository. The Blueprint wires PostgreSQL, Render Key Value/Redis, the web service, worker, cron jobs, persistent upload disk, and production env vars.
+
+
+## GitHub naming
+
+This ZIP root folder is `RoomNearWork/` to match the public GitHub repo name. See `GITHUB_COMPARISON_AND_NAMING.md`.
+
+
+## New in this build: address confirmation, taxi layer and tenant reviews
+
+This ZIP adds:
+
+- Google Places session-token scaffolding for autocomplete cost control.
+- A “Did you mean this address?” confirmation panel for exact workplace searches.
+- RNW taxi-rank data scaffolding for South African minibus-taxi commute estimates.
+- Tenant rental reviews with moderation: tenants can review rentals after applying or after an approved viewing.
+- Admin review moderation from the verification dashboard.
+
+Tenant reviews are stored as `rental_reviews` and are public only when `status='approved'`.

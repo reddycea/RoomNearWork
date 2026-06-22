@@ -9,5 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 COPY . .
+RUN chmod +x /app/docker/entrypoint.sh
+ENTRYPOINT ["/app/docker/entrypoint.sh"]
 EXPOSE 8000
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "backend.app:create_app()"]

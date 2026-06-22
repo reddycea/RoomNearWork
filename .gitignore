@@ -15,3 +15,5 @@ uploads/
 .DS_Store
 .coverage
 htmlcov/
+*.pyc
+.mypy_cache/

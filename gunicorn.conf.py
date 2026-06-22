@@ -1,7 +1,8 @@
 import multiprocessing
 import os
 
-bind = os.getenv("GUNICORN_BIND", "0.0.0.0:8000")
+port = os.getenv("PORT", "8000")
+bind = os.getenv("GUNICORN_BIND", f"0.0.0.0:{port}")
 workers = int(os.getenv("WEB_CONCURRENCY", multiprocessing.cpu_count() * 2 + 1))
 worker_class = os.getenv("GUNICORN_WORKER_CLASS", "gthread")
 threads = int(os.getenv("GUNICORN_THREADS", "8"))
