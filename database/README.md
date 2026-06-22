@@ -1,81 +1,29 @@
 # RNW Database Package
 
-This folder contains ready-to-import database files for the upgraded RNW project.
+This folder is kept to match the public GitHub repository structure for `reddycea/RoomNearWork`.
 
-## Recommended for the included Docker setup: MySQL
+## Recommended path
 
-The current `docker-compose.yml` uses MySQL 8.4, so the easiest database file is:
+For this updated codebase, the source of truth is the Alembic migration:
 
-```bash
-mysql_rnw_full.sql
-```
+    backend/migrations/versions/20260620_0001_rnw_full_upgrade.py
 
-### Import into the Docker MySQL container
+For local development, prefer:
 
-From the project root:
+    flask --app backend.app:create_app init-db
+    flask --app backend.app:create_app seed-db
 
-```bash
-docker compose up -d db
-cat database/mysql_rnw_full.sql | docker compose exec -T db mysql -urnw -pchange-db-password rnw
-```
+For production upgrades, prefer:
 
-Then start the full app:
-
-```bash
-docker compose up --build
-```
-
-## PostgreSQL version
-
-Use these files if you deploy on a host such as Render PostgreSQL:
-
-```bash
-postgres_rnw_full.sql
-```
-
-Example local import:
-
-```bash
-psql "$DATABASE_URL" -f database/postgres_rnw_full.sql
-```
-
-## Demo accounts
-
-| Role | Email | Password |
-|---|---|---|
-| Admin | admin@rnw.local | AdminPass123! |
-| Landlord | landlord@rnw.local | LandlordPass123! |
-| Tenant | tenant@rnw.local | TenantPass123! |
-
-## Included subscriptions
-
-| Plan | Role | Price | Limit |
-|---|---|---:|---:|
-| Tenant Plus | tenant | R50pm | Save/apply/recommendations |
-| Landlord Pro | landlord | R100pm | 25 active listings |
+    flask --app backend.app:create_app db upgrade
 
 ## Files
 
-- `mysql_schema.sql` — MySQL schema only
-- `mysql_seed_demo.sql` — MySQL demo data only
-- `mysql_rnw_full.sql` — MySQL schema + demo data
-- `postgres_schema.sql` — PostgreSQL schema only
-- `postgres_seed_demo.sql` — PostgreSQL demo data only
-- `postgres_rnw_full.sql` — PostgreSQL schema + demo data
+- `mysql_schema.sql` — MySQL schema helper.
+- `mysql_seed_demo.sql` — demo seed notes for MySQL.
+- `mysql_rnw_full.sql` — MySQL schema helper + seed notes.
+- `postgres_schema.sql` — PostgreSQL schema helper.
+- `postgres_seed_demo.sql` — demo seed notes for PostgreSQL.
+- `postgres_rnw_full.sql` — PostgreSQL schema helper + seed notes.
 
-## Important
-
-These files are for development/demo use. For production, change all demo passwords immediately and use Flask-Migrate/Alembic for database changes after launch.
-
-
-## Trust/review tables added
-
-The database now includes production launch tables for:
-
-- `property_reviews` — moderated tenant reviews and landlord responses
-- `listing_reports` — suspicious/fake listing reports
-- `support_tickets` — support/contact tickets
-- `legal_consents` — terms/privacy/POPIA consent records
-- `payment_webhook_logs` — PayFast/IPN audit logs
-
-The demo seed creates one approved tenant application, one approved review, and one support ticket so the review and admin moderation screens are visible immediately.
+The Flask seed command remains safer because it creates password hashes with the installed app code.
