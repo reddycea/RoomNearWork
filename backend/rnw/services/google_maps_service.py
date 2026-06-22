@@ -100,7 +100,7 @@ def fallback_suggestions(text: str) -> list[PlaceSuggestion]:
     return suggestions[:5]
 
 
-def places_autocomplete(text: str) -> list[PlaceSuggestion]:
+def places_autocomplete(text: str, session_token: str | None = None) -> list[PlaceSuggestion]:
     text = (text or "").strip()
     if len(text) < 2:
         return []
@@ -113,6 +113,8 @@ def places_autocomplete(text: str) -> list[PlaceSuggestion]:
         "components": "country:za",
         "language": current_app.config.get("GOOGLE_MAPS_LANGUAGE", "en-ZA"),
     }
+    if session_token:
+        params["sessiontoken"] = session_token
     try:
         response = requests.get("https://maps.googleapis.com/maps/api/place/autocomplete/json", params=params, timeout=8)
         response.raise_for_status()

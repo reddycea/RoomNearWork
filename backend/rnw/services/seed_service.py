@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from backend.rnw.extensions import db
-from backend.rnw.models import Property, User
+from backend.rnw.models import Property, TaxiRank, User
 from backend.rnw.services.google_maps_service import geocode_property_address
 from backend.rnw.services.listing_quality_service import update_listing_quality
 from backend.rnw.services.subscription_service import ensure_default_plans
@@ -61,4 +61,19 @@ def seed_database() -> None:
             )
             update_listing_quality(prop)
             db.session.add(prop)
+    seed_taxi_ranks()
     db.session.commit()
+
+
+
+def seed_taxi_ranks() -> None:
+    ranks = [
+        ("Gateway / Umhlanga taxi pickup", "Umhlanga", "Umhlanga", "KwaZulu-Natal", -29.7245, 31.0651, "Use as demo data; verify exact rank before production."),
+        ("Durban Station taxi rank", "CBD", "Durban", "KwaZulu-Natal", -29.8519, 31.0256, "Major Durban public transport interchange."),
+        ("Sandton taxi rank", "Sandton", "Johannesburg", "Gauteng", -26.1062, 28.0560, "Demo taxi-rank record for workplace commute testing."),
+        ("Noord taxi rank", "CBD", "Johannesburg", "Gauteng", -26.1980, 28.0462, "Demo taxi-rank record for central Johannesburg."),
+    ]
+    for name, suburb, city, province, lat, lon, notes in ranks:
+        existing = TaxiRank.query.filter_by(name=name).first()
+        if not existing:
+            db.session.add(TaxiRank(name=name, suburb=suburb, city=city, province=province, latitude=lat, longitude=lon, notes=notes, is_active=True))

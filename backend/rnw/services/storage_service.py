@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 
 from flask import current_app
 from werkzeug.datastructures import FileStorage
