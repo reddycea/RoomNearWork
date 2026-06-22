@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
-from pathlib import Path
 
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_from_directory, url_for
 from flask_login import current_user, login_required
@@ -14,6 +12,7 @@ from backend.rnw.services.audit_service import log_action
 from backend.rnw.services.geolocation_service import bounding_box, filter_properties_by_distance
 from backend.rnw.services.google_maps_service import attach_commute_measures, geocode_address, geocode_place_id, geocode_property_address
 from backend.rnw.services.listing_quality_service import update_listing_quality
+from backend.rnw.services.taxi_route_service import attach_taxi_rank_estimates
 from backend.rnw.services.seo_service import real_estate_json_ld
 from backend.rnw.services.subscription_service import landlord_can_create_listing, lock_user
 from backend.rnw.utils.decorators import landlord_required, tenant_required
@@ -135,6 +134,7 @@ def index():
                 candidates = _query_by_area(query, origin.area_label, origin.city, origin.province).limit(2000).all()
             properties = filter_properties_by_distance(candidates, origin.latitude, origin.longitude, float(max_distance)) or candidates
             attach_commute_measures(origin, properties, selected_mode=travel_mode)
+            attach_taxi_rank_estimates(origin.latitude, origin.longitude, properties)
             if max_travel_minutes:
                 properties = [prop for prop in properties if not getattr(prop, "commute_modes", None) or any(m.duration_min is not None and m.duration_min <= max_travel_minutes for m in prop.commute_modes)]
             properties.sort(key=lambda prop: min([m.duration_min for m in getattr(prop, "commute_modes", []) if m.duration_min is not None] or [999999]))
@@ -153,7 +153,12 @@ def detail(property_id: int):
         abort(404)
     Property.increment_views_atomic(property_id)
     json_ld = real_estate_json_ld(property_)
-    return render_template("properties/detail.html", property=property_, json_ld=json_ld)
+    approved_reviews = property_.approved_reviews()
+    user_review = None
+    if current_user.is_authenticated:
+        from backend.rnw.models import RentalReview
+        user_review = RentalReview.query.filter_by(property_id=property_.id, tenant_id=current_user.id).one_or_none()
+    return render_template("properties/detail.html", property=property_, json_ld=json_ld, approved_reviews=approved_reviews, user_review=user_review)
 
 
 @properties_bp.route("/new", methods=["GET", "POST"])

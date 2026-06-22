@@ -6,7 +6,7 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, u
 from flask_login import current_user, login_required
 
 from backend.rnw.extensions import db
-from backend.rnw.models import ListingReport, Property, PropertyAsset, SupportTicket, User
+from backend.rnw.models import ListingReport, Property, PropertyAsset, RentalReview, SupportTicket, User
 from backend.rnw.services.audit_service import log_action
 from backend.rnw.utils.decorators import admin_required, two_factor_required
 from backend.rnw.utils.security import clean_user_text
@@ -25,6 +25,7 @@ def dashboard():
         "pending_documents": PropertyAsset.query.filter(PropertyAsset.is_private.is_(True), PropertyAsset.review_status == "pending").count(),
         "reports": ListingReport.query.filter_by(status="open").count(),
         "tickets": SupportTicket.query.filter_by(status="open").count(),
+        "pending_reviews": RentalReview.query.filter_by(status="pending").count(),
     }
     return render_template("admin/dashboard.html", counts=counts)
 
@@ -36,7 +37,8 @@ def dashboard():
 def verifications():
     listings = Property.query.filter(Property.status.in_(["under_review", "rejected"])).order_by(Property.created_at.asc()).all()
     documents = PropertyAsset.query.filter(PropertyAsset.is_private.is_(True)).order_by(PropertyAsset.created_at.desc()).all()
-    return render_template("admin/verifications.html", listings=listings, documents=documents)
+    reviews = RentalReview.query.filter_by(status="pending").order_by(RentalReview.created_at.asc()).all()
+    return render_template("admin/verifications.html", listings=listings, documents=documents, reviews=reviews)
 
 
 @admin_bp.post("/properties/<int:property_id>/<action>")
@@ -80,4 +82,23 @@ def moderate_asset(asset_id: int, action: str):
     log_action(f"document_{action}d", "PropertyAsset", asset.id, {"note": asset.review_note})
     db.session.commit()
     flash(f"Document {action}d.", "success")
+    return redirect(url_for("admin.verifications"))
+
+
+
+@admin_bp.post("/reviews/<int:review_id>/<action>")
+@login_required
+@admin_required
+@two_factor_required
+def moderate_review(review_id: int, action: str):
+    if action not in {"approve", "reject"}:
+        abort(404)
+    review = db.session.get(RentalReview, review_id) or abort(404)
+    review.status = "approved" if action == "approve" else "rejected"
+    review.admin_note = clean_user_text(request.form.get("note"), 1000)
+    review.reviewed_by_id = current_user.id
+    review.reviewed_at = datetime.utcnow()
+    log_action(f"rental_review_{action}d", "RentalReview", review.id, {"note": review.admin_note})
+    db.session.commit()
+    flash(f"Review {action}d.", "success")
     return redirect(url_for("admin.verifications"))

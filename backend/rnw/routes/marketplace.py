@@ -7,7 +7,7 @@ from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
 from backend.rnw.extensions import db, limiter
-from backend.rnw.models import ConversationMessage, ConversationThread, Property, SavedSearch, ViewingAppointment
+from backend.rnw.models import ConversationMessage, ConversationThread, Property, RentalApplication, RentalReview, SavedSearch, ViewingAppointment
 from backend.rnw.services.audit_service import log_action
 from backend.rnw.services.google_maps_service import geocode_address, geocode_place_id
 from backend.rnw.utils.decorators import admin_required, landlord_required, tenant_required
@@ -189,3 +189,71 @@ def renew_property(property_id: int):
 def admin_moderation():
     pending = Property.query.filter_by(status="under_review").order_by(Property.created_at.asc()).all()
     return render_template("marketplace/admin_moderation.html", pending=pending)
+
+
+
+def _rating_value(name: str) -> int | None:
+    value = request.form.get(name, type=int)
+    if value is None:
+        return None
+    return max(1, min(5, value))
+
+
+def _can_review_property(property_: Property) -> bool:
+    if not current_user.is_authenticated or current_user.role != "tenant" or property_.landlord_id == current_user.id:
+        return False
+    has_application = RentalApplication.query.filter_by(property_id=property_.id, applicant_id=current_user.id).first() is not None
+    has_viewing = ViewingAppointment.query.filter_by(property_id=property_.id, tenant_id=current_user.id).filter(ViewingAppointment.status.in_(["approved", "completed"])).first() is not None
+    return has_application or has_viewing
+
+
+@marketplace_bp.route("/reviews/property/<int:property_id>/new", methods=["GET", "POST"])
+@login_required
+@tenant_required
+@limiter.limit("5 per hour", methods=["POST"])
+def new_review(property_id: int):
+    property_ = db.session.get(Property, property_id) or abort(404)
+    if not _can_review_property(property_):
+        flash("You can review this rental after applying or after an approved viewing.", "warning")
+        return redirect(url_for("properties.detail", property_id=property_.id))
+    existing = RentalReview.query.filter_by(property_id=property_.id, tenant_id=current_user.id).one_or_none()
+    if existing and request.method == "GET":
+        return render_template("marketplace/review_form.html", property=property_, review=existing)
+    if request.method == "POST":
+        review = existing or RentalReview(property_id=property_.id, tenant_id=current_user.id, landlord_id=property_.landlord_id)
+        review.rating = _rating_value("rating") or 5
+        review.accuracy_rating = _rating_value("accuracy_rating")
+        review.safety_rating = _rating_value("safety_rating")
+        review.commute_rating = _rating_value("commute_rating")
+        review.landlord_communication_rating = _rating_value("landlord_communication_rating")
+        review.title = clean_user_text(request.form.get("title"), 140) or "Tenant review"
+        review.comment = clean_user_text(request.form.get("comment"), 3000)
+        review.status = "pending"
+        review.admin_note = None
+        if not review.comment:
+            flash("Please add a short review comment.", "danger")
+            return render_template("marketplace/review_form.html", property=property_, review=review)
+        db.session.add(review)
+        try:
+            log_action("rental_review_submitted", "RentalReview", None, {"property_id": property_.id})
+            db.session.commit()
+            flash("Review submitted for moderation. Thank you for helping other tenants.", "success")
+        except IntegrityError:
+            db.session.rollback()
+            flash("You already reviewed this rental. Open your existing review to edit it.", "info")
+        return redirect(url_for("properties.detail", property_id=property_.id))
+    return render_template("marketplace/review_form.html", property=property_, review=existing)
+
+
+@marketplace_bp.post("/reviews/<int:review_id>/delete")
+@login_required
+def delete_review(review_id: int):
+    review = db.session.get(RentalReview, review_id) or abort(404)
+    if review.tenant_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    property_id = review.property_id
+    db.session.delete(review)
+    log_action("rental_review_deleted", "RentalReview", review.id)
+    db.session.commit()
+    flash("Review removed.", "success")
+    return redirect(url_for("properties.detail", property_id=property_id))
