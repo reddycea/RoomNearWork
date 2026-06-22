@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<section class='auth-page'><form method='post' class='auth-card'><h1>Admin 2FA setup</h1><p>Use this URI in your authenticator app:</p><code>{{ otp_uri }}</code><input type='hidden' name='csrf_token' value='{{ csrf_token() }}'><label>Code<input name='token' required></label><button>Enable 2FA</button></form></section>{% endblock %}
