@@ -1,12 +1,1 @@
-{% extends 'base.html' %}
-{% block title %}Contact support — RNW{% endblock %}
-{% block content %}
-<section class="panel narrow"><h1>Contact RNW support</h1><p class="muted">Use this for billing, account, landlord verification, safety, or technical help.</p>
-<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-<label>Name<input name="name" value="{{ current_user.full_name if current_user.is_authenticated else '' }}"></label>
-<label>Email<input type="email" name="email" required value="{{ current_user.email if current_user.is_authenticated else '' }}"></label>
-<label>Category<select name="category">{% for category in categories %}<option value="{{ category }}">{{ category|title }}</option>{% endfor %}</select></label>
-<label>Subject<input name="subject" required maxlength="160"></label>
-<label>Message<textarea name="message" rows="7" required></textarea></label>
-<button>Submit support ticket</button></form></section>
-{% endblock %}
+{% extends 'base.html' %}{% block content %}<section class='auth-page'><form method='post' class='auth-card'><h1>Support</h1><input type='hidden' name='csrf_token' value='{{ csrf_token() }}'><label>Email<input name='email' type='email' value='{{ current_user.email if current_user.is_authenticated else "" }}' required></label><label>Subject<input name='subject' required></label><label>Message<textarea name='message' required></textarea></label><button>Create ticket</button></form></section>{% endblock %}
