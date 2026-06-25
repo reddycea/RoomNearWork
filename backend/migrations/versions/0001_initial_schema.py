@@ -455,4 +455,3 @@ def downgrade():
     op.drop_table("payment_webhook_logs")
     op.drop_table("subscription_plans")
     op.drop_table("users")
-```
