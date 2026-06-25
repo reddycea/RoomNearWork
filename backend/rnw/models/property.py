@@ -17,7 +17,7 @@ class Property(TimestampMixin, db.Model):
     landlord_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=False)
-    rent_amount = db.Column(db.Integer, nullable=False)
+    rent_amount = db.Column("price", db.Integer, nullable=False)
     deposit_amount = db.Column(db.Integer, default=0, nullable=False)
     bedrooms = db.Column(db.Integer, default=1, nullable=False)
     bathrooms = db.Column(db.Integer, default=1, nullable=False)
@@ -57,7 +57,7 @@ class Property(TimestampMixin, db.Model):
     reviews = db.relationship("RentalReview", back_populates="property", cascade="all, delete-orphan", lazy="dynamic")
 
     __table_args__ = (
-        Index("ix_properties_search", "status", "is_active", "city", "province", "rent_amount"),
+        Index("ix_properties_search", "status", "is_active", "city", "province", "price"),
         Index("ix_properties_geo", "latitude", "longitude"),
     )
 
