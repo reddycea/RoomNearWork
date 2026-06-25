@@ -1,8 +1,11 @@
 #!/usr/bin/env sh
 set -e
 
-if [ "${RUN_MIGRATIONS_ON_START:-false}" = "true" ]; then
-  flask --app backend.app:create_app db upgrade
-fi
+echo "Creating database tables if missing..."
+flask --app backend.app:create_app init-db
 
+echo "Ensuring subscription plans..."
+flask --app backend.app:create_app ensure-plans || true
+
+echo "Starting app..."
 exec "$@"
