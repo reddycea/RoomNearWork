@@ -2,6 +2,10 @@ services:
   web:
     build: .
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://rnw:change-db-password@db:5432/rnw
+      REDIS_URL: redis://redis:6379/0
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1
     ports:
       - "8000:8000"
     depends_on:
@@ -14,6 +18,9 @@ services:
     build: .
     command: python scripts/run_worker.py
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://rnw:change-db-password@db:5432/rnw
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - redis
       - db
@@ -23,6 +30,9 @@ services:
     build: .
     command: python scripts/run_scheduler.py
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://rnw:change-db-password@db:5432/rnw
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - web
       - redis
