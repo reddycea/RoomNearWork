@@ -20,7 +20,15 @@ class User(UserMixin, TimestampMixin, db.Model):
 
     role = db.Column(db.String(30), default="tenant", nullable=False)  # active role
     can_act_as_tenant = db.Column(db.Boolean, default=True, nullable=False)
-    can_act_as_landlord = db.Column(db.Boolean, default=True, nullable=False)
+    can_act_as_landlord = db.Column(db.Boolean, default=False, nullable=False)
+    landlord_approved_at = db.Column(db.DateTime)
+    landlord_approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    landlord_approved_by = db.relationship(
+        "User",
+        remote_side=[id],
+        foreign_keys=[landlord_approved_by_id],
+    )
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     is_active_account = db.Column(db.Boolean, default=True, nullable=False)
 
