@@ -1,20 +1,43 @@
 from __future__ import annotations
 
+from datetime import datetime
 
-from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_from_directory, url_for
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
+)
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
 from backend.rnw.extensions import db, limiter
-from backend.rnw.models import Property, PropertyAsset, RentalApplication
+from backend.rnw.models import (
+    Property,
+    PropertyAsset,
+    RentalApplication,
+    SubscriptionPlan,
+    User,
+    UserSubscription,
+)
 from backend.rnw.services.audit_service import log_action
 from backend.rnw.services.geolocation_service import bounding_box, filter_properties_by_distance
 from backend.rnw.services.google_maps_service import attach_commute_measures, geocode_address, geocode_place_id, geocode_property_address
 from backend.rnw.services.listing_quality_service import update_listing_quality
 from backend.rnw.services.taxi_route_service import attach_taxi_rank_estimates
 from backend.rnw.services.seo_service import real_estate_json_ld
-from backend.rnw.services.subscription_service import landlord_can_create_listing, lock_user
+from backend.rnw.services.subscription_service import (
+    landlord_can_create_listing,
+    landlord_has_active_subscription,
+    lock_user,
+    tenant_can_apply_for_rental,
+)
 from backend.rnw.utils.decorators import landlord_required, tenant_required
 from backend.rnw.utils.security import clean_user_text
 from backend.rnw.utils.uploads import ALLOWED_DOCUMENT_EXTENSIONS, ALLOWED_IMAGE_EXTENSIONS, guess_mime, save_upload
@@ -45,7 +68,6 @@ def _save_property_asset(prop: Property, file, kind: str, private: bool) -> Prop
         review_status="approved" if kind == "photo" else "pending",
     )
 
-
 def _query_by_area(query, area: str | None, city: str | None, province: str | None):
     area_terms = [term for term in {area, city, province} if term]
     if not area_terms:
@@ -55,6 +77,28 @@ def _query_by_area(query, area: str | None, city: str | None, province: str | No
         like = f"%{term}%"
         filters.extend([Property.suburb.ilike(like), Property.city.ilike(like), Property.province.ilike(like)])
     return query.filter(or_(*filters))
+
+def _tenant_visible_property_query():
+    now = datetime.utcnow()
+
+    return (
+        Property.query
+        .join(User, Property.landlord_id == User.id)
+        .join(UserSubscription, UserSubscription.user_id == User.id)
+        .join(SubscriptionPlan, SubscriptionPlan.id == UserSubscription.plan_id)
+        .filter(
+            Property.is_active.is_(True),
+            Property.status == "available",
+            User.can_act_as_landlord.is_(True),
+            UserSubscription.status == "active",
+            UserSubscription.role == "landlord",
+            SubscriptionPlan.role == "landlord",
+            or_(
+                UserSubscription.current_period_end.is_(None),
+                UserSubscription.current_period_end >= now,
+            ),
+        )
+    )
 
 
 def _populate_property_from_form(prop: Property) -> None:
@@ -296,14 +340,70 @@ def media(asset_id: int):
 @limiter.limit("10 per hour")
 def apply(property_id: int):
     property_ = db.session.get(Property, property_id) or abort(404)
+
     if property_.landlord_id == current_user.id:
         abort(403)
-    application = RentalApplication(property_id=property_id, applicant_id=current_user.id, message=clean_user_text(request.form.get("message"), 2000))
+
+    if not property_.is_active or property_.status != "available":
+        flash("This rental is not available for applications.", "warning")
+        return redirect(url_for("properties.index"))
+
+    if not property_.landlord.can_act_as_landlord:
+        flash("This landlord is not approved yet.", "warning")
+        return redirect(url_for("properties.index"))
+
+    if not landlord_has_active_subscription(property_.landlord_id):
+        flash("This rental is not accepting applications right now.", "warning")
+        return redirect(url_for("properties.index"))
+
+    existing_application = RentalApplication.query.filter_by(
+        property_id=property_.id,
+        applicant_id=current_user.id,
+    ).one_or_none()
+
+    if existing_application:
+        flash("You already applied for this listing.", "info")
+        return redirect(url_for("properties.detail", property_id=property_id))
+
+    can_apply, reason, tenant_subscription, used, max_applications = (
+        tenant_can_apply_for_rental(current_user.id)
+    )
+
+    if not can_apply:
+        flash(reason, "warning")
+        return redirect(url_for("billing.index"))
+
+    application = RentalApplication(
+        property_id=property_id,
+        applicant_id=current_user.id,
+        tenant_subscription_id=tenant_subscription.id,
+        message=clean_user_text(request.form.get("message"), 2000),
+    )
+
     db.session.add(application)
+
     try:
+        log_action(
+            "rental_application_created",
+            "RentalApplication",
+            None,
+            {
+                "property_id": property_id,
+                "tenant_subscription_id": tenant_subscription.id,
+                "used_before_application": used,
+                "max_applications": max_applications,
+            },
+        )
+
         db.session.commit()
-        flash("Application sent.", "success")
+
+        flash(
+            f"Application sent. You have used {used + 1}/{max_applications} applications.",
+            "success",
+        )
+
     except IntegrityError:
         db.session.rollback()
         flash("You already applied for this listing.", "info")
+
     return redirect(url_for("properties.detail", property_id=property_id))
