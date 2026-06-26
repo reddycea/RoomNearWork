@@ -14,7 +14,10 @@ class SubscriptionPlan(TimestampMixin, db.Model):
     role = db.Column(db.String(30), nullable=False, index=True)
     price_cents = db.Column(db.Integer, nullable=False)
     currency = db.Column(db.String(10), default="ZAR", nullable=False)
+
     max_active_listings = db.Column(db.Integer)
+    max_rental_applications = db.Column(db.Integer, default=0, nullable=False)
+
     is_active = db.Column(db.Boolean, default=True, nullable=False)
 
 
