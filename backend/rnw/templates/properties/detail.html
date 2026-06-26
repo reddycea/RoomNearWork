@@ -35,13 +35,84 @@
       </details>
     {% endif %}
     {% if current_user.is_authenticated and current_user.role == 'tenant' %}
-      <form method="post" action="{{ url_for('marketplace.start_message', property_id=property.id) }}" class="stacked-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><textarea name="body">Hi, I am interested in this rental.</textarea><button>Message landlord</button></form>
-      <a class="button secondary" href="{{ url_for('marketplace.request_viewing', property_id=property.id) }}">Request viewing</a>
-      {% if not user_review %}<a class="button secondary" href="{{ url_for('marketplace.new_review', property_id=property.id) }}">Write review</a>{% else %}<a class="button secondary" href="{{ url_for('marketplace.new_review', property_id=property.id) }}">Edit your review</a>{% endif %}
-      <form method="post" action="{{ url_for('properties.apply', property_id=property.id) }}" class="stacked-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><textarea name="message" placeholder="Application note"></textarea><button>Apply</button></form>
-    {% elif not current_user.is_authenticated %}
-      <a class="button" href="{{ url_for('auth.login') }}">Log in to contact</a>
+  <section class="panel">
+    <h2>Interested in this rental?</h2>
+
+    <form method="post" action="{{ url_for('marketplace.start_message', property_id=property.id) }}">
+      <label for="message-body">Message landlord</label>
+      <textarea id="message-body" name="body" rows="3">Hi, I am interested in this rental.</textarea>
+      <button type="submit">Message landlord</button>
+    </form>
+
+    <p>
+      <a class="button secondary" href="{{ url_for('marketplace.request_viewing', property_id=property.id) }}">
+        Request viewing
+      </a>
+    </p>
+
+    {% if property_accepts_applications %}
+      {% if tenant_application_state and tenant_application_state.can_apply %}
+        <form method="post" action="{{ url_for('properties.apply', property_id=property.id) }}">
+          <label for="application-message">Application message</label>
+          <textarea
+            id="application-message"
+            name="message"
+            rows="4"
+            placeholder="Tell the landlord why you are interested."
+          ></textarea>
+
+          <p class="muted">
+            Applications used:
+            {{ tenant_application_state.used }}/{{ tenant_application_state.limit }}
+          </p>
+
+          <button type="submit">Apply for this rental</button>
+        </form>
+      {% else %}
+        <div class="notice">
+          <h3>Tenant subscription required</h3>
+          <p>
+            You need an active tenant subscription before applying.
+            Tenant subscription allows up to 10 rental applications.
+          </p>
+
+          {% if tenant_application_state and tenant_application_state.reason %}
+            <p class="muted">{{ tenant_application_state.reason }}</p>
+          {% endif %}
+
+          <a class="button" href="{{ url_for('billing.index') }}">
+            Pay tenant subscription
+          </a>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="notice">
+        <h3>Applications unavailable</h3>
+        <p>This rental is not accepting applications right now.</p>
+      </div>
     {% endif %}
+
+    {% if not user_review %}
+      <p>
+        <a href="{{ url_for('marketplace.new_review', property_id=property.id) }}">
+          Write review
+        </a>
+      </p>
+    {% else %}
+      <p>
+        <a href="{{ url_for('marketplace.new_review', property_id=property.id) }}">
+          Edit your review
+        </a>
+      </p>
+    {% endif %}
+  </section>
+{% elif not current_user.is_authenticated %}
+  <section class="panel">
+    <h2>Interested in this rental?</h2>
+    <p>Please log in to message the landlord, request a viewing, or apply.</p>
+    <a class="button" href="{{ url_for('auth.login') }}">Log in to contact</a>
+  </section>
+{% endif %}
     <a class="report-link" href="{{ url_for('trust.report_listing', property_id=property.id) }}">Report this listing</a>
   </div>
 </section>
