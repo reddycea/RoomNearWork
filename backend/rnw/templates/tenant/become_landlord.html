@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+
+{% block title %}Apply to become landlord — Room Near Work{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <p class="eyebrow">Landlord application</p>
+  <h1>Apply to become a landlord</h1>
+
+  <p class="muted">
+    Tenants are default users. To become a landlord, submit your apartment
+    details for admin approval.
+  </p>
+
+  <form method="post" action="{{ url_for('landlord.apply') }}" enctype="multipart/form-data">
+    <h2>Apartment details</h2>
+
+    <label for="title">Apartment title</label>
+    <input
+      id="title"
+      name="title"
+      required
+      placeholder="Example: Modern studio near CBD"
+    >
+
+    <label for="rent_amount">Monthly rent</label>
+    <input
+      id="rent_amount"
+      name="rent_amount"
+      type="number"
+      min="0"
+      required
+      placeholder="4200"
+    >
+
+    <label for="bedrooms">Bedrooms</label>
+    <input
+      id="bedrooms"
+      name="bedrooms"
+      type="number"
+      min="0"
+      value="1"
+      required
+    >
+
+    <label for="bathrooms">Bathrooms</label>
+    <input
+      id="bathrooms"
+      name="bathrooms"
+      type="number"
+      min="0"
+      value="1"
+      required
+    >
+
+    <label for="address_line">Exact address</label>
+    <input
+      id="address_line"
+      name="address_line"
+      required
+      placeholder="Street, suburb, city"
+    >
+
+    <label for="city">City</label>
+    <input id="city" name="city" required>
+
+    <label for="province">Province</label>
+    <input id="province" name="province" required>
+
+    <label for="description">Description</label>
+    <textarea
+      id="description"
+      name="description"
+      rows="5"
+      required
+      placeholder="Describe the apartment, transport access, safety and nearby workplaces."
+    ></textarea>
+
+    <h2>Proof documents</h2>
+
+    <label for="proof_registration">Proof of ownership / authority</label>
+    <input
+      id="proof_registration"
+      name="proof_registration"
+      type="file"
+      accept=".pdf,.jpg,.jpeg,.png"
+      required
+    >
+
+    <label for="id_document">Your ID document</label>
+    <input
+      id="id_document"
+      name="id_document"
+      type="file"
+      accept=".pdf,.jpg,.jpeg,.png"
+      required
+    >
+
+    <label for="message">Message to admin</label>
+    <textarea
+      id="message"
+      name="message"
+      rows="4"
+      placeholder="Explain why this rental should be approved."
+    ></textarea>
+
+    <button type="submit">Submit for admin approval</button>
+  </form>
+</section>
+{% endblock %}
