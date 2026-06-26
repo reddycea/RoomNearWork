@@ -202,8 +202,35 @@ def detail(property_id: int):
     if current_user.is_authenticated:
         from backend.rnw.models import RentalReview
         user_review = RentalReview.query.filter_by(property_id=property_.id, tenant_id=current_user.id).one_or_none()
-    return render_template("properties/detail.html", property=property_, json_ld=json_ld, approved_reviews=approved_reviews, user_review=user_review)
+        tenant_application_state = None
+property_accepts_applications = (
+    property_.is_active
+    and property_.status == "available"
+    and property_.landlord.can_act_as_landlord
+    and landlord_has_active_subscription(property_.landlord_id)
+)
 
+if current_user.is_authenticated and current_user.role == "tenant":
+    can_apply, reason, tenant_subscription, used, limit = tenant_can_apply_for_rental(
+        current_user.id,
+    )
+
+    tenant_application_state = {
+        "can_apply": can_apply,
+        "reason": reason,
+        "subscription": tenant_subscription,
+        "used": used,
+        "limit": limit,
+    }
+    return render_template(
+        "properties/detail.html",
+        property=property_,
+        json_ld=json_ld,
+        approved_reviews=approved_reviews,
+        user_review=user_review,
+        tenant_application_state=tenant_application_state,
+        property_accepts_applications=property_accepts_applications,
+    )
 
 @properties_bp.route("/new", methods=["GET", "POST"])
 @login_required
