@@ -8,8 +8,20 @@ class RentalApplication(TimestampMixin, db.Model):
     __tablename__ = "rental_applications"
 
     id = db.Column(db.Integer, primary_key=True)
-    property_id = db.Column(db.Integer, db.ForeignKey("properties.id"), nullable=False, index=True)
-    applicant_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+
+    property_id = db.Column(
+        db.Integer,
+        db.ForeignKey("properties.id"),
+        nullable=False,
+        index=True,
+    )
+
+    applicant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
 
     tenant_subscription_id = db.Column(
         db.Integer,
