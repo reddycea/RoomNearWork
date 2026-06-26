@@ -1,6 +1,7 @@
 from .user import User
 from .property import Property, PropertyAsset
 from .rental import RentalApplication
+from .landlord_application import LandlordApplication
 from .subscription import Invoice, PaymentWebhookLog, SubscriptionPlan, UserSubscription
 from .trust import LandlordVerification, ListingReport, SupportTicket
 from .marketplace import (
@@ -21,6 +22,7 @@ __all__ = [
     "Property",
     "PropertyAsset",
     "RentalApplication",
+    "LandlordApplication",
     "SubscriptionPlan",
     "UserSubscription",
     "Invoice",
