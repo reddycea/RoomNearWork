@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(30) NOT NULL DEFAULT 'tenant',
   can_act_as_tenant TINYINT(1) NOT NULL DEFAULT 1,
-  can_act_as_landlord TINYINT(1) NOT NULL DEFAULT 1,
+  can_act_as_landlord TINYINT(1) NOT NULL DEFAULT 0,
+  landlord_approved_at DATETIME NULL,
+  landlord_approved_by_id INT NULL,
   is_admin TINYINT(1) NOT NULL DEFAULT 0,
   is_active_account TINYINT(1) NOT NULL DEFAULT 1,
   email_verified TINYINT(1) NOT NULL DEFAULT 0,
@@ -100,6 +102,7 @@ CREATE TABLE IF NOT EXISTS rental_applications (
   id INT AUTO_INCREMENT PRIMARY KEY,
   property_id INT NOT NULL,
   applicant_id INT NOT NULL,
+  tenant_subscription_id INT NULL,
   message TEXT,
   status VARCHAR(40) NOT NULL DEFAULT 'pending',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -109,6 +112,37 @@ CREATE TABLE IF NOT EXISTS rental_applications (
   INDEX ix_rental_applications_applicant_id (applicant_id)
 );
 
+CREATE TABLE IF NOT EXISTS landlord_applications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  applicant_id INT NOT NULL,
+  property_id INT NULL,
+  status VARCHAR(40) NOT NULL DEFAULT 'pending',
+  message TEXT,
+  admin_note TEXT,
+  reviewed_by_id INT NULL,
+  reviewed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  INDEX ix_landlord_applications_applicant_id (applicant_id),
+  INDEX ix_landlord_applications_property_id (property_id),
+  INDEX ix_landlord_applications_status (status),
+  INDEX ix_landlord_applications_applicant_status (applicant_id, status),
+  INDEX ix_landlord_applications_status_created (status, created_at),
+
+  CONSTRAINT fk_landlord_applications_applicant
+    FOREIGN KEY (applicant_id) REFERENCES users(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_landlord_applications_property
+    FOREIGN KEY (property_id) REFERENCES properties(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT fk_landlord_applications_reviewed_by
+    FOREIGN KEY (reviewed_by_id) REFERENCES users(id)
+    ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS subscription_plans (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(120) NOT NULL UNIQUE,
@@ -116,6 +150,7 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
   price_cents INT NOT NULL,
   currency VARCHAR(10) NOT NULL DEFAULT 'ZAR',
   max_active_listings INT NULL,
+  max_rental_applications INT NOT NULL DEFAULT 0,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
