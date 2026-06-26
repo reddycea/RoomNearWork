@@ -1,1 +1,83 @@
-{% extends 'base.html' %}{% block content %}<section class='dashboard'><h1>Billing</h1><div class='cards'>{% for plan in plans %}<article class='property-card'><div class='card-body'><h3>{{ plan.name }}</h3><p>R{{ plan.price_cents // 100 }} / month</p><form method='post' action='{{ url_for('billing.subscribe', plan_id=plan.id) }}'><input type='hidden' name='csrf_token' value='{{ csrf_token() }}'><button>Subscribe</button></form></div></article>{% endfor %}</div></section>{% endblock %}
+{% extends 'base.html' %}
+
+{% block title %}Billing — Room Near Work{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <p class="eyebrow">Subscriptions</p>
+  <h1>Choose your RoomNearWork plan</h1>
+
+  <p class="muted">
+    Tenants need a subscription to apply for rentals. Landlords need a subscription
+    before approved rentals appear in tenant search.
+  </p>
+
+  {% set ns = namespace(has_tenant=false, has_landlord=false) %}
+
+  {% for sub in subscriptions %}
+    {% if sub.status == 'active' and sub.role == 'tenant' %}
+      {% set ns.has_tenant = true %}
+    {% endif %}
+
+    {% if sub.status == 'active' and sub.role == 'landlord' %}
+      {% set ns.has_landlord = true %}
+    {% endif %}
+  {% endfor %}
+
+  <div class="grid cards">
+    {% for plan in plans %}
+      <article class="card">
+        {% if plan.role == 'tenant' %}
+          <p class="eyebrow">Tenant plan</p>
+          <h2>{{ plan.name }}</h2>
+
+          <p class="price">
+            R{{ plan.price_cents // 100 }} / month
+          </p>
+
+          <p>
+            Apply to up to
+            <strong>{{ plan.max_rental_applications or 10 }}</strong>
+            rentals.
+          </p>
+
+          {% if ns.has_tenant %}
+            <span class="badge success">Active</span>
+          {% else %}
+            <form method="post" action="{{ url_for('billing.subscribe', plan_id=plan.id) }}">
+              <button type="submit">Pay tenant subscription</button>
+            </form>
+          {% endif %}
+        {% endif %}
+
+        {% if plan.role == 'landlord' %}
+          <p class="eyebrow">Landlord plan</p>
+          <h2>{{ plan.name }}</h2>
+
+          <p class="price">
+            R{{ plan.price_cents // 100 }} / month
+          </p>
+
+          <p>
+            Show approved rentals in tenant search.
+          </p>
+
+          {% if plan.max_active_listings %}
+            <p class="muted">
+              Up to {{ plan.max_active_listings }} active listings.
+            </p>
+          {% endif %}
+
+          {% if ns.has_landlord %}
+            <span class="badge success">Active</span>
+          {% else %}
+            <form method="post" action="{{ url_for('billing.subscribe', plan_id=plan.id) }}">
+              <button type="submit">Pay landlord subscription</button>
+            </form>
+          {% endif %}
+        {% endif %}
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
