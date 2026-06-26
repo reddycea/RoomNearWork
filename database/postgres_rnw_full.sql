@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(30) NOT NULL DEFAULT 'tenant',
   can_act_as_tenant BOOLEAN NOT NULL DEFAULT 1,
-  can_act_as_landlord BOOLEAN NOT NULL DEFAULT 1,
+  can_act_as_landlord BOOLEAN NOT NULL DEFAULT false,
+  landlord_approved_at TIMESTAMP NULL,
+  landlord_approved_by_id INT NULL,
   is_admin BOOLEAN NOT NULL DEFAULT 0,
   is_active_account BOOLEAN NOT NULL DEFAULT 1,
   email_verified BOOLEAN NOT NULL DEFAULT 0,
@@ -100,6 +102,7 @@ CREATE TABLE IF NOT EXISTS rental_applications (
   id SERIAL PRIMARY KEY,
   property_id INT NOT NULL,
   applicant_id INT NOT NULL,
+  tenant_subscription_id INT NULL,
   message TEXT,
   status VARCHAR(40) NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -109,6 +112,46 @@ CREATE TABLE IF NOT EXISTS rental_applications (
   INDEX ix_rental_applications_applicant_id (applicant_id)
 );
 
+CREATE TABLE IF NOT EXISTS landlord_applications (
+  id SERIAL PRIMARY KEY,
+  applicant_id INT NOT NULL,
+  property_id INT NULL,
+  status VARCHAR(40) NOT NULL DEFAULT 'pending',
+  message TEXT,
+  admin_note TEXT,
+  reviewed_by_id INT NULL,
+  reviewed_at TIMESTAMP NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT fk_landlord_applications_applicant
+    FOREIGN KEY (applicant_id) REFERENCES users(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_landlord_applications_property
+    FOREIGN KEY (property_id) REFERENCES properties(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT fk_landlord_applications_reviewed_by
+    FOREIGN KEY (reviewed_by_id) REFERENCES users(id)
+    ON DELETE SET NULL
+);
+
+CREATE INDEX ix_landlord_applications_applicant_id
+  ON landlord_applications (applicant_id);
+
+CREATE INDEX ix_landlord_applications_property_id
+  ON landlord_applications (property_id);
+
+CREATE INDEX ix_landlord_applications_status
+  ON landlord_applications (status);
+
+CREATE INDEX ix_landlord_applications_applicant_status
+  ON landlord_applications (applicant_id, status);
+
+CREATE INDEX ix_landlord_applications_status_created
+  ON landlord_applications (status, created_at);
+
 CREATE TABLE IF NOT EXISTS subscription_plans (
   id SERIAL PRIMARY KEY,
   name VARCHAR(120) NOT NULL UNIQUE,
@@ -116,6 +159,7 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
   price_cents INT NOT NULL,
   currency VARCHAR(10) NOT NULL DEFAULT 'ZAR',
   max_active_listings INT NULL,
+  max_rental_applications INT NOT NULL DEFAULT 0,
   is_active BOOLEAN NOT NULL DEFAULT 1,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP 
