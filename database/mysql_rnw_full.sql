@@ -354,3 +354,14 @@ CREATE TABLE IF NOT EXISTS rental_reviews (
   updated_at DATETIME NOT NULL,
   UNIQUE(property_id, tenant_id)
 );
+
+ALTER TABLE subscription_plans
+ADD COLUMN IF NOT EXISTS max_rental_applications INTEGER NOT NULL DEFAULT 0;
+
+UPDATE subscription_plans
+SET max_rental_applications = 10
+WHERE role = 'tenant';
+
+UPDATE subscription_plans
+SET max_rental_applications = 0
+WHERE role = 'landlord';
