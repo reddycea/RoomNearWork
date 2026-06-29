@@ -1,17 +1,4 @@
 BEGIN;
-
--- ============================================================
--- RoomNearWork FULL UPDATED PostgreSQL Schema
--- Includes:
--- - Original/old RNW schema
--- - New landlord subscription flow
--- - New subscription_plans.max_rental_applications
--- - New landlord_applications table
--- - New rental_applications.tenant_subscription_id
--- - Default Tenant Plus / Landlord Pro plans
--- ============================================================
-
-
 -- ============================================================
 -- 1. USERS
 -- ============================================================
