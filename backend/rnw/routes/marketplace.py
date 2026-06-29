@@ -7,7 +7,7 @@ from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
 from backend.rnw.extensions import db, limiter
-from backend.rnw.models import ConversationMessage, ConversationThread, Property, RentalApplication, RentalReview, SavedSearch, ViewingAppointment
+from backend.rnw.models import ConversationMessage, ConversationThread, LandlordApplication, Property, RentalApplication, RentalReview, SavedSearch, ViewingAppointment
 from backend.rnw.services.audit_service import log_action
 from backend.rnw.services.google_maps_service import geocode_address, geocode_place_id
 from backend.rnw.utils.decorators import admin_required, landlord_required, tenant_required
@@ -30,6 +30,58 @@ def switch_role():
     flash(f"Now acting as {role.title()}.", "success")
     return redirect(request.referrer or url_for("main.index"))
 
+@marketplace_bp.route("/landlord/apply", methods=["GET", "POST"])
+@login_required
+@tenant_required
+@limiter.limit("5 per hour", methods=["POST"])
+def landlord_apply():
+    if current_user.can_act_as_landlord:
+        flash("Your landlord access is already approved.", "info")
+        return redirect(url_for("landlord.dashboard"))
+
+    existing_application = (
+        LandlordApplication.query
+        .filter_by(applicant_id=current_user.id)
+        .order_by(LandlordApplication.created_at.desc())
+        .first()
+    )
+
+    if (
+        existing_application
+        and existing_application.status == "pending"
+    ):
+        if request.method == "POST":
+            flash("You already have a pending landlord application.", "info")
+            return redirect(url_for("tenant.dashboard"))
+
+        return render_template(
+            "marketplace/landlord_apply.html",
+            application=existing_application,
+        )
+
+    if request.method == "POST":
+        application = LandlordApplication(
+            applicant_id=current_user.id,
+            message=clean_user_text(request.form.get("message"), 2000),
+            status="pending",
+        )
+
+        db.session.add(application)
+        log_action(
+            "landlord_application_created",
+            "LandlordApplication",
+            None,
+            {"applicant_id": current_user.id},
+        )
+        db.session.commit()
+
+        flash("Landlord application submitted for admin approval.", "success")
+        return redirect(url_for("tenant.dashboard"))
+
+    return render_template(
+        "marketplace/landlord_apply.html",
+        application=existing_application,
+    )
 
 @marketplace_bp.route("/saved-searches", methods=["GET", "POST"])
 @login_required
