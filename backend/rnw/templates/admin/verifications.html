@@ -1,6 +1,38 @@
 {% extends 'base.html' %}
 {% block title %}Verification queue — Room Near Work{% endblock %}
 {% block content %}
+<h2>Landlord applications</h2>
+
+{% for application in landlord_applications %}
+  <article class="card">
+    <h3>{{ application.applicant.full_name }}</h3>
+    <p>{{ application.applicant.email }}</p>
+
+    {% if application.message %}
+      <p>{{ application.message }}</p>
+    {% endif %}
+
+    <form
+      method="post"
+      action="{{ url_for('admin.moderate_landlord_application', application_id=application.id, action='approve') }}"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Approve landlord</button>
+    </form>
+
+    <form
+      method="post"
+      action="{{ url_for('admin.moderate_landlord_application', application_id=application.id, action='reject') }}"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="note-{{ application.id }}">Rejection note</label>
+      <input id="note-{{ application.id }}" name="note" type="text">
+      <button type="submit">Reject</button>
+    </form>
+  </article>
+{% else %}
+  <p>No landlord applications waiting.</p>
+{% endfor %}
 <section class="dashboard"><div class="section-head"><h1>Verification queue</h1><a class="button secondary" href="{{ url_for('admin.dashboard') }}">Admin dashboard</a></div>
   <div class="grid-two">
     <div class="panel"><h2>Listings</h2>
