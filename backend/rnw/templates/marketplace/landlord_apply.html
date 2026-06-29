@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block title %}Apply to become a landlord — Room Near Work{% endblock %}
+
+{% block content %}
+<section class="card">
+  <p class="eyebrow">Landlord approval</p>
+  <h1>Apply to become a landlord</h1>
+
+  {% if application and application.status == 'pending' %}
+    <p>Your landlord application is already pending.</p>
+    <p>Submitted on {{ application.created_at.strftime('%d %b %Y') }}.</p>
+
+  {% else %}
+    <p>
+      Tell the admin team why you want landlord access. Once approved, you can switch
+      to landlord mode, create listings, and subscribe to Landlord Pro.
+    </p>
+
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="message">Application message</label>
+      <textarea
+        id="message"
+        name="message"
+        rows="6"
+        required
+        placeholder="Example: I own or manage rooms/apartments and want to list them on Room Near Work."
+      >{% if application %}{{ application.message or '' }}{% endif %}</textarea>
+
+      <button type="submit">Submit application</button>
+    </form>
+  {% endif %}
+
+  <p>
+    <a href="{{ url_for('tenant.dashboard') }}">Back to tenant dashboard</a>
+  </p>
+</section>
+{% endblock %}
