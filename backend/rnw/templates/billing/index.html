@@ -3,12 +3,12 @@
 {% block title %}Billing — Room Near Work{% endblock %}
 
 {% block content %}
-<section class="panel">
+<section class="billing-page">
   <p class="eyebrow">Subscriptions</p>
   <h1>Choose your RoomNearWork plan</h1>
 
-  <p class="muted">
-    Tenants need a subscription to apply for rentals. Landlords need a subscription
+  <p>
+    Tenants need Tenant Plus to apply for rentals. Landlords need Landlord Pro
     before approved rentals appear in tenant search.
   </p>
 
@@ -24,9 +24,9 @@
     {% endif %}
   {% endfor %}
 
-  <div class="grid cards">
+  <div class="plan-grid">
     {% for plan in plans %}
-      <article class="card">
+      <article class="card plan-card">
         {% if plan.role == 'tenant' %}
           <p class="eyebrow">Tenant plan</p>
           <h2>{{ plan.name }}</h2>
@@ -35,16 +35,17 @@
             R{{ plan.price_cents // 100 }} / month
           </p>
 
-          <p>
-            Apply to up to
-            <strong>{{ plan.max_rental_applications or 10 }}</strong>
-            rentals.
-          </p>
+          <ul>
+            <li>Apply to up to {{ plan.max_rental_applications or 10 }} rentals per subscription period.</li>
+            <li>Message landlords.</li>
+            <li>Request property viewings.</li>
+          </ul>
 
           {% if ns.has_tenant %}
-            <span class="badge success">Active</span>
+            <button disabled>Tenant Plus active</button>
           {% else %}
             <form method="post" action="{{ url_for('billing.subscribe', plan_id=plan.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit">Pay tenant subscription</button>
             </form>
           {% endif %}
@@ -58,20 +59,22 @@
             R{{ plan.price_cents // 100 }} / month
           </p>
 
-          <p>
-            Show approved rentals in tenant search.
-          </p>
+          <ul>
+            <li>Show approved rentals in tenant search.</li>
+            <li>Up to {{ plan.max_active_listings or 25 }} active listings.</li>
+            <li>Receive tenant applications.</li>
+          </ul>
 
-          {% if plan.max_active_listings %}
-            <p class="muted">
-              Up to {{ plan.max_active_listings }} active listings.
-            </p>
-          {% endif %}
-
-          {% if ns.has_landlord %}
-            <span class="badge success">Active</span>
+          {% if not current_user.can_act_as_landlord %}
+            <p>You need landlord approval before activating this plan.</p>
+            <a class="button" href="{{ url_for('marketplace.landlord_apply') }}">
+              Apply for landlord approval
+            </a>
+          {% elif ns.has_landlord %}
+            <button disabled>Landlord Pro active</button>
           {% else %}
             <form method="post" action="{{ url_for('billing.subscribe', plan_id=plan.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit">Pay landlord subscription</button>
             </form>
           {% endif %}
