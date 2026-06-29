@@ -3,76 +3,88 @@
 {% block title %}Tenant dashboard — Room Near Work{% endblock %}
 
 {% block content %}
-<section class="panel">
+<section class="dashboard">
   <p class="eyebrow">Tenant dashboard</p>
   <h1>Welcome, {{ current_user.full_name }}</h1>
 
-  <div class="grid cards">
-    <article class="card">
-      <h2>Rental applications</h2>
+  <section class="card">
+    <h2>Rental applications</h2>
 
-      {% if tenant_subscription %}
-        <p class="price">
-          {{ applications_used }}/{{ applications_limit }}
-        </p>
-        <p class="muted">Applications used on your current tenant subscription.</p>
-      {% else %}
-        <p>You need a tenant subscription before applying for rentals.</p>
-        <a class="button" href="{{ url_for('billing.index') }}">
-          Pay tenant subscription
-        </a>
+    {% if tenant_subscription %}
+      <p class="metric">
+        {{ applications_used }}/{{ applications_limit }}
+      </p>
+      <p>Applications used on your current Tenant Plus subscription.</p>
+    {% else %}
+      <p>You need a Tenant Plus subscription before applying for rentals.</p>
+      <a class="button" href="{{ url_for('billing.index') }}">Pay tenant subscription</a>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Become a landlord</h2>
+
+    {% if current_user.can_act_as_landlord %}
+      <p>You are approved as a landlord.</p>
+
+      <form method="post" action="{{ url_for('marketplace.switch_role') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="role" value="landlord">
+        <button type="submit">Switch to landlord</button>
+      </form>
+
+    {% elif landlord_application and landlord_application.status == 'pending' %}
+      <p>Your landlord application is waiting for admin approval.</p>
+
+    {% elif landlord_application and landlord_application.status == 'rejected' %}
+      <p>Your previous landlord application was rejected.</p>
+
+      {% if landlord_application.admin_note %}
+        <p><strong>Admin note:</strong> {{ landlord_application.admin_note }}</p>
       {% endif %}
-    </article>
 
-    <article class="card">
-      <h2>Become a landlord</h2>
+      <a class="button" href="{{ url_for('marketplace.landlord_apply') }}">
+        Apply again
+      </a>
 
-      {% if current_user.can_act_as_landlord %}
-        <p>You are approved as a landlord.</p>
-        <form method="post" action="{{ url_for('marketplace.switch_role') }}">
-          <input type="hidden" name="role" value="landlord">
-          <button type="submit">Switch to landlord</button>
-        </form>
-      {% else %}
-        <p>
-          Want to list your apartment? Submit your apartment details for admin approval.
-        </p>
-        <a class="button secondary" href="{{ url_for('landlord.apply') }}">
-          Apply to become landlord
-        </a>
-      {% endif %}
-    </article>
-  </div>
-</section>
+    {% else %}
+      <p>Want to list your apartment? Submit a landlord application for admin approval.</p>
 
-<section class="panel">
-  <h2>Your applications</h2>
+      <a class="button" href="{{ url_for('marketplace.landlord_apply') }}">
+        Apply to become landlord
+      </a>
+    {% endif %}
+  </section>
 
-  {% for app in applications %}
-    <article class="card">
-      <h3>{{ app.property.title }}</h3>
-      <p>Status: <strong>{{ app.status|title }}</strong></p>
-      <p class="muted">{{ app.created_at.strftime('%d %b %Y') }}</p>
-    </article>
-  {% else %}
-    <p>No applications yet.</p>
-  {% endfor %}
-</section>
+  <section class="card">
+    <h2>Your applications</h2>
 
-<section class="panel">
-  <h2>Saved searches</h2>
+    {% for app in applications %}
+      <article class="list-item">
+        <h3>{{ app.property.title }}</h3>
+        <p>Status: {{ app.status|title }}</p>
+        <p>{{ app.created_at.strftime('%d %b %Y') }}</p>
+      </article>
+    {% else %}
+      <p>No applications yet.</p>
+    {% endfor %}
+  </section>
 
-  <p>
-    <a href="{{ url_for('marketplace.saved_searches') }}">Saved searches</a>
-  </p>
+  <section class="card">
+    <h2>Saved searches</h2>
 
-  {% for search in saved_searches %}
-    <article class="card">
-      <h3>{{ search.name }}</h3>
-      <p>{{ search.city or 'Any city' }}</p>
-    </article>
-  {% else %}
-    <p>No saved searches.</p>
-  {% endfor %}
+    <p>
+      <a href="{{ url_for('marketplace.saved_searches') }}">Saved searches</a>
+    </p>
+
+    {% for search in saved_searches %}
+      <article class="list-item">
+        <h3>{{ search.name }}</h3>
+        <p>{{ search.city or 'Any city' }}</p>
+      </article>
+    {% else %}
+      <p>No saved searches.</p>
+    {% endfor %}
+  </section>
 </section>
 {% endblock %}
