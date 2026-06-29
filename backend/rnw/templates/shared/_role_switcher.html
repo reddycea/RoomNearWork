@@ -9,8 +9,14 @@
   {% endfor %}
 
   {% if switchable_roles|length > 1 %}
-    <form method="post" action="{{ url_for('marketplace.switch_role') }}" class="role-switcher">
-      <label for="role-switch" class="sr-only">Switch role</label>
+    <form
+      method="post"
+      action="{{ url_for('marketplace.switch_role') }}"
+      class="role-switcher"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="role-switch">Switch role</label>
 
       <select id="role-switch" name="role" onchange="this.form.submit()">
         {% for role in switchable_roles %}
@@ -19,6 +25,10 @@
           </option>
         {% endfor %}
       </select>
+
+      <noscript>
+        <button type="submit">Switch</button>
+      </noscript>
     </form>
   {% endif %}
 {% endif %}
