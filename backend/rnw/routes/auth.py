@@ -25,7 +25,7 @@ def register():
         if not password_is_strong(password):
             flash("Use at least 8 characters with uppercase, lowercase and a number.", "danger")
             return render_template("auth/register.html")
-        user = User(email=email, full_name=full_name, role="tenant", can_act_as_tenant=True, can_act_as_landlord=True)
+        user = User(email=email, full_name=full_name, role="tenant", can_act_as_tenant=True, can_act_as_landlord=False)
         user.set_password(password)
         db.session.add(user)
         try:
