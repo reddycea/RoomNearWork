@@ -6,7 +6,7 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, u
 from flask_login import current_user, login_required
 
 from backend.rnw.extensions import db
-from backend.rnw.models import ListingReport, Property, PropertyAsset, RentalReview, SupportTicket, User
+from backend.rnw.models import ListingReport, Property, LandlordApplication, PropertyAsset, RentalReview, SupportTicket, User
 from backend.rnw.services.audit_service import log_action
 from backend.rnw.utils.decorators import admin_required, two_factor_required
 from backend.rnw.utils.security import clean_user_text
@@ -21,6 +21,7 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 def dashboard():
     counts = {
         "users": User.query.count(),
+        "pending_landlord_applications": LandlordApplication.query.filter_by(status="pending").count(),
         "pending_listings": Property.query.filter_by(status="under_review").count(),
         "pending_documents": PropertyAsset.query.filter(PropertyAsset.is_private.is_(True), PropertyAsset.review_status == "pending").count(),
         "reports": ListingReport.query.filter_by(status="open").count(),
@@ -38,8 +39,38 @@ def verifications():
     listings = Property.query.filter(Property.status.in_(["under_review", "rejected"])).order_by(Property.created_at.asc()).all()
     documents = PropertyAsset.query.filter(PropertyAsset.is_private.is_(True)).order_by(PropertyAsset.created_at.desc()).all()
     reviews = RentalReview.query.filter_by(status="pending").order_by(RentalReview.created_at.asc()).all()
-    return render_template("admin/verifications.html", listings=listings, documents=documents, reviews=reviews)
+    landlord_applications = (LandlordApplication.query.filter_by(status="pending").order_by(LandlordApplication.created_at.asc()).all())
+    return render_template("admin/verifications.html", listings=listings, documents=documents, reviews=reviews, landlord_applications=landlord_applications,)
 
+
+@admin_bp.post("/landlord-applications/<int:application_id>/<action>")
+@login_required
+@admin_required
+@two_factor_required
+def moderate_landlord_application(application_id: int, action: str):
+    if action not in {"approve", "reject"}:
+        abort(404)
+
+    application = db.session.get(LandlordApplication, application_id) or abort(404)
+    note = clean_user_text(request.form.get("note"), 1000)
+
+    if action == "approve":
+        application.approve(current_user.id)
+        message = "Landlord application approved."
+    else:
+        application.reject(note, current_user.id)
+        message = "Landlord application rejected."
+
+    log_action(
+        f"landlord_application_{action}d",
+        "LandlordApplication",
+        application.id,
+        {"note": note},
+    )
+
+    db.session.commit()
+    flash(message, "success")
+    return redirect(url_for("admin.verifications"))
 
 @admin_bp.post("/properties/<int:property_id>/<action>")
 @login_required
