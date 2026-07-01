@@ -32,8 +32,6 @@ class User(UserMixin, TimestampMixin, db.Model):
         remote_side=[id],
         foreign_keys=[landlord_approved_by_id],
     )
-    is_admin = db.Column(db.Boolean, default=False, nullable=False)
-    is_admin = db.Column(db.Boolean, default=False, nullable=False)
     is_active_account = db.Column(db.Boolean, default=True, nullable=False)
 
     email_verified = db.Column(db.Boolean, default=False, nullable=False)
@@ -73,8 +71,6 @@ class User(UserMixin, TimestampMixin, db.Model):
             roles.append("tenant")
         if self.can_act_as_landlord:
             roles.append("landlord")
-        if self.is_admin:
-            roles.append("admin")
         return roles
 
     def can_use_role(self, role: str) -> bool:
