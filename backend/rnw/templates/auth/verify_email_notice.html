@@ -1,3 +1,0 @@
-{% extends 'base.html' %}{% block content %}<section class='page-hero compact'><h1>Verify your email</h1><p>Check your inbox before continuing with high-risk actions.</p></section>{% endblock %}
-
-<form method='post' action='{{ url_for('auth.resend_verification') }}'><input type='hidden' name='csrf_token' value='{{ csrf_token() }}'><button>Resend verification email</button></form>

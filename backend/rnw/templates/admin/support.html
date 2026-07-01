@@ -1,4 +1,0 @@
-{% extends 'base.html' %}
-{% block title %}Support tickets — RNW{% endblock %}
-{% block content %}<h1>Support tickets</h1><p><a href="?status=open">Open</a> · <a href="?status=pending_user">Pending user</a> · <a href="?status=resolved">Resolved</a> · <a href="{{ url_for('admin.support_tickets') }}">All</a></p>
-<table><tr><th>ID</th><th>Category</th><th>User</th><th>Subject</th><th>Status</th><th>Created</th></tr>{% for ticket in tickets %}<tr><td>#{{ ticket.id }}</td><td>{{ ticket.category }}</td><td>{{ ticket.name }}<br><span class="muted">{{ ticket.email }}</span></td><td><a href="{{ url_for('admin.support_ticket', ticket_id=ticket.id) }}">{{ ticket.subject }}</a></td><td>{{ ticket.status }}</td><td>{{ ticket.created_at.date() }}</td></tr>{% else %}<tr><td colspan="6">No support tickets.</td></tr>{% endfor %}</table>{% endblock %}
