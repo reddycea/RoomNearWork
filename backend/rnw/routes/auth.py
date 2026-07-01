@@ -93,7 +93,7 @@ def register():
         if verification_url:
             flash(f"Development verification link: {verification_url}", "info")
 
-        return redirect(url_for("auth.choose_role")))
+        return redirect(url_for("auth.choose_role"))
     return render_template("auth/register.html")
 
 
