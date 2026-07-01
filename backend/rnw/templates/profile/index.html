@@ -1,171 +1,471 @@
 {% extends 'base.html' %}
 
-{% block title %}My profile — Room Near Work{% endblock %}
+{% block title %}My Profile — Room Near Work{% endblock %}
+
+{% block head %}
+<style>
+  .profile-page {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 2rem 1rem 4rem;
+  }
+
+  .profile-hero {
+    background: linear-gradient(135deg, #111827, #1f2937);
+    color: #fff;
+    border-radius: 28px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.18);
+  }
+
+  .profile-hero-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .profile-identity {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .profile-avatar {
+    width: 76px;
+    height: 76px;
+    border-radius: 24px;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, 0.14);
+    font-size: 2rem;
+    font-weight: 800;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+  }
+
+  .profile-hero h1 {
+    margin: 0;
+    font-size: clamp(1.7rem, 4vw, 2.5rem);
+  }
+
+  .profile-hero p {
+    margin: .35rem 0 0;
+    color: rgba(255, 255, 255, .74);
+  }
+
+  .role-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .55rem .85rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .12);
+    color: #fff;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, .16);
+  }
+
+  .profile-grid {
+    display: grid;
+    grid-template-columns: 1.15fr .85fr;
+    gap: 1.25rem;
+  }
+
+  .profile-card {
+    background: #fff;
+    border-radius: 24px;
+    padding: 1.4rem;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 14px 35px rgba(15, 23, 42, 0.07);
+  }
+
+  .profile-card + .profile-card {
+    margin-top: 1.25rem;
+  }
+
+  .profile-card h2 {
+    margin: 0 0 .35rem;
+    font-size: 1.2rem;
+    color: #111827;
+  }
+
+  .profile-card .muted {
+    color: #6b7280;
+    margin-top: 0;
+    margin-bottom: 1.2rem;
+  }
+
+  .form-row {
+    margin-bottom: 1rem;
+  }
+
+  .form-row label {
+    display: block;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: .4rem;
+  }
+
+  .form-control {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 14px;
+    padding: .85rem 1rem;
+    font: inherit;
+    background: #fff;
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+
+  .form-control:focus {
+    outline: none;
+    border-color: #111827;
+    box-shadow: 0 0 0 4px rgba(17, 24, 39, .08);
+  }
+
+  .form-control:disabled {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: .75rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .btn {
+    border: 0;
+    border-radius: 999px;
+    padding: .8rem 1.1rem;
+    font-weight: 800;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+  }
+
+  .btn-primary {
+    background: #111827;
+    color: #fff;
+  }
+
+  .btn-success {
+    background: #16a34a;
+    color: #fff;
+  }
+
+  .btn-warning {
+    background: #f59e0b;
+    color: #111827;
+  }
+
+  .btn-outline {
+    background: #fff;
+    color: #111827;
+    border: 1px solid #d1d5db;
+  }
+
+  .btn-outline:hover {
+    background: #f9fafb;
+  }
+
+  .status-box {
+    border-radius: 18px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+  }
+
+  .status-box.success {
+    background: #ecfdf5;
+    border-color: #bbf7d0;
+    color: #166534;
+  }
+
+  .status-box.warning {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+  }
+
+  .status-box.danger {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #991b1b;
+  }
+
+  .mini-stat-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: .8rem;
+  }
+
+  .mini-stat {
+    padding: 1rem;
+    border-radius: 18px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+  }
+
+  .mini-stat span {
+    display: block;
+    color: #6b7280;
+    font-size: .85rem;
+    margin-bottom: .25rem;
+  }
+
+  .mini-stat strong {
+    color: #111827;
+  }
+
+  textarea.form-control {
+    resize: vertical;
+    min-height: 120px;
+  }
+
+  @media (max-width: 850px) {
+    .profile-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .profile-hero {
+      padding: 1.4rem;
+      border-radius: 22px;
+    }
+
+    .profile-avatar {
+      width: 62px;
+      height: 62px;
+      border-radius: 20px;
+    }
+  }
+</style>
+{% endblock %}
 
 {% block content %}
-<section class="container py-4">
-  <h1>My profile</h1>
+<main class="profile-page">
 
-  <div class="card mb-4">
-    <div class="card-body">
-      <h2>Profile details</h2>
-
-      <form method="post" action="{{ url_for('profile.index') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-        <div class="mb-3">
-          <label for="full_name">Full name</label>
-          <input
-            id="full_name"
-            name="full_name"
-            class="form-control"
-            value="{{ current_user.full_name }}"
-            required
-          >
+  <section class="profile-hero">
+    <div class="profile-hero-top">
+      <div class="profile-identity">
+        <div class="profile-avatar">
+          {{ current_user.full_name[:1]|upper if current_user.full_name else 'U' }}
         </div>
 
-        <div class="mb-3">
-          <label for="email">Email</label>
-          <input
-            id="email"
-            class="form-control"
-            value="{{ current_user.email }}"
-            disabled
-          >
+        <div>
+          <h1>{{ current_user.full_name }}</h1>
+          <p>{{ current_user.email }}</p>
         </div>
+      </div>
 
-        <div class="mb-3">
-          <label for="phone">Phone number</label>
-          <input
-            id="phone"
-            name="phone"
-            class="form-control"
-            value="{{ current_user.phone or '' }}"
-            placeholder="+27..."
-          >
-        </div>
-
-        <button type="submit" class="btn btn-primary">Save profile</button>
-      </form>
+      <div class="role-pill">
+        Current mode: {{ current_user.role|title }}
+      </div>
     </div>
-  </div>
+  </section>
 
-  <div class="card mb-4">
-    <div class="card-body">
-      <h2>Change password</h2>
+  <section class="profile-grid">
+    <div>
+      <div class="profile-card">
+        <h2>Profile details</h2>
+        <p class="muted">Update your name and phone number.</p>
 
-      <form method="post" action="{{ url_for('profile.change_password') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-        <div class="mb-3">
-          <label for="current_password">Current password</label>
-          <input
-            id="current_password"
-            name="current_password"
-            type="password"
-            class="form-control"
-            required
-          >
-        </div>
-
-        <div class="mb-3">
-          <label for="new_password">New password</label>
-          <input
-            id="new_password"
-            name="new_password"
-            type="password"
-            class="form-control"
-            required
-          >
-        </div>
-
-        <div class="mb-3">
-          <label for="confirm_password">Confirm new password</label>
-          <input
-            id="confirm_password"
-            name="confirm_password"
-            type="password"
-            class="form-control"
-            required
-          >
-        </div>
-
-        <button type="submit" class="btn btn-warning">Change password</button>
-      </form>
-    </div>
-  </div>
-
-  <div class="card mb-4">
-    <div class="card-body">
-      <h2>Role</h2>
-
-      <p>
-        Current role:
-        <strong>{{ current_user.role|title }}</strong>
-      </p>
-
-      {% if current_user.can_act_as_tenant %}
-        <form method="post" action="{{ url_for('profile.switch_role', role='tenant') }}" class="d-inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-outline-primary">
-            Switch to tenant
-          </button>
-        </form>
-      {% endif %}
-
-      {% if current_user.can_act_as_landlord %}
-        <form method="post" action="{{ url_for('profile.switch_role', role='landlord') }}" class="d-inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-outline-success">
-            Switch to landlord
-          </button>
-        </form>
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-body">
-      <h2>Become a landlord</h2>
-
-      {% if current_user.can_act_as_landlord %}
-        <p class="text-success">
-          Your landlord account has been approved. You can switch to landlord mode.
-        </p>
-      {% elif pending_landlord_application %}
-        <p class="text-warning">
-          Your landlord application is pending admin approval.
-        </p>
-      {% else %}
-        {% if latest_landlord_application and latest_landlord_application.status == 'rejected' %}
-          <p class="text-danger">
-            Your previous application was rejected.
-            {% if latest_landlord_application.admin_note %}
-              Reason: {{ latest_landlord_application.admin_note }}
-            {% endif %}
-          </p>
-        {% endif %}
-
-        <form method="post" action="{{ url_for('profile.apply_landlord') }}">
+        <form method="post" action="{{ url_for('profile.index') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-          <div class="mb-3">
-            <label for="message">Tell the admin why you want landlord access</label>
-            <textarea
-              id="message"
-              name="message"
+          <div class="form-row">
+            <label for="full_name">Full name</label>
+            <input
+              id="full_name"
+              name="full_name"
               class="form-control"
-              rows="4"
-              placeholder="Example: I own or manage rental rooms and want to list them on Room Near Work."
-            ></textarea>
+              value="{{ current_user.full_name or '' }}"
+              required
+            >
           </div>
 
-          <button type="submit" class="btn btn-success">
-            Apply to become a landlord
-          </button>
+          <div class="form-row">
+            <label for="email">Email address</label>
+            <input
+              id="email"
+              class="form-control"
+              value="{{ current_user.email }}"
+              disabled
+            >
+          </div>
+
+          <div class="form-row">
+            <label for="phone">Phone number</label>
+            <input
+              id="phone"
+              name="phone"
+              class="form-control"
+              value="{{ current_user.phone or '' }}"
+              placeholder="+27 82 000 0000"
+            >
+          </div>
+
+          <div class="btn-row">
+            <button type="submit" class="btn btn-primary">
+              Save profile
+            </button>
+          </div>
         </form>
-      {% endif %}
+      </div>
+
+      <div class="profile-card">
+        <h2>Change password</h2>
+        <p class="muted">Use a strong password with letters and numbers.</p>
+
+        <form method="post" action="{{ url_for('profile.change_password') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <div class="form-row">
+            <label for="current_password">Current password</label>
+            <input
+              id="current_password"
+              name="current_password"
+              type="password"
+              class="form-control"
+              required
+            >
+          </div>
+
+          <div class="form-row">
+            <label for="new_password">New password</label>
+            <input
+              id="new_password"
+              name="new_password"
+              type="password"
+              class="form-control"
+              required
+            >
+          </div>
+
+          <div class="form-row">
+            <label for="confirm_password">Confirm new password</label>
+            <input
+              id="confirm_password"
+              name="confirm_password"
+              type="password"
+              class="form-control"
+              required
+            >
+          </div>
+
+          <div class="btn-row">
+            <button type="submit" class="btn btn-warning">
+              Change password
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
-</section>
+
+    <aside>
+      <div class="profile-card">
+        <h2>Account status</h2>
+        <p class="muted">Manage tenant and landlord access.</p>
+
+        <div class="mini-stat-grid">
+          <div class="mini-stat">
+            <span>Tenant access</span>
+            <strong>
+              {% if current_user.can_act_as_tenant %}
+                Approved
+              {% else %}
+                Not available
+              {% endif %}
+            </strong>
+          </div>
+
+          <div class="mini-stat">
+            <span>Landlord access</span>
+            <strong>
+              {% if current_user.can_act_as_landlord %}
+                Approved
+              {% else %}
+                Not approved yet
+              {% endif %}
+            </strong>
+          </div>
+        </div>
+
+        <hr>
+
+        <div class="btn-row">
+          {% if current_user.can_act_as_tenant %}
+            <form method="post" action="{{ url_for('profile.switch_role', role='tenant') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-outline">
+                Switch to tenant
+              </button>
+            </form>
+          {% endif %}
+
+          {% if current_user.can_act_as_landlord %}
+            <form method="post" action="{{ url_for('profile.switch_role', role='landlord') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-success">
+                Switch to landlord
+              </button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="profile-card">
+        <h2>Become a landlord</h2>
+        <p class="muted">Apply to list rental spaces on Room Near Work.</p>
+
+        {% if current_user.can_act_as_landlord %}
+          <div class="status-box success">
+            Your landlord account has been approved. You can now switch to landlord mode.
+          </div>
+
+        {% elif pending_landlord_application %}
+          <div class="status-box warning">
+            Your landlord application is waiting for admin approval.
+          </div>
+
+        {% else %}
+          {% if latest_landlord_application and latest_landlord_application.status == 'rejected' %}
+            <div class="status-box danger">
+              Your previous landlord application was rejected.
+              {% if latest_landlord_application.admin_note %}
+                <br>
+                Reason: {{ latest_landlord_application.admin_note }}
+              {% endif %}
+            </div>
+          {% endif %}
+
+          <form method="post" action="{{ url_for('profile.apply_landlord') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="form-row">
+              <label for="message">Application message</label>
+              <textarea
+                id="message"
+                name="message"
+                class="form-control"
+                placeholder="Tell the admin why you want to become a landlord..."
+              ></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-success">
+              Apply to become landlord
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </aside>
+  </section>
+
+</main>
 {% endblock %}
