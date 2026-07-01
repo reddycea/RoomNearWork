@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}{% if property %}Edit rental{% else %}Register a rental{% endif %} — Room Near Work{% endblock %}
+{% block content %}
+<section class="form-page landlord-form-page">
+  <div class="form-intro">
+    <p class="eyebrow">Landlord onboarding</p>
+    <h1>{% if property %}Update your rental.{% else %}Register a new rental.{% endif %}</h1>
+    <p>Upload apartment photos for tenants, plus private proof of property registration and ID document for admin verification.</p>
+  </div>
+  <form method="post" enctype="multipart/form-data" class="panel-form wide-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="google_place_id" id="rental_place_id" value="{{ property.google_place_id if property else '' }}">
+    <div class="form-grid">
+      <label>Title<input name="title" required placeholder="Room near Gateway / Umhlanga offices" value="{{ property.title if property else '' }}"></label>
+      <label>Monthly rent<input name="rent_amount" type="number" required value="{{ property.rent_amount if property else '' }}"></label>
+      <label>Deposit<input name="deposit_amount" type="number" value="{{ property.deposit_amount if property else '' }}"></label>
+      <label>Bedrooms<input name="bedrooms" type="number" value="{{ property.bedrooms if property else 1 }}"></label>
+      <label>Bathrooms<input name="bathrooms" type="number" value="{{ property.bathrooms if property else 1 }}"></label>
+      <label>Suburb<input name="suburb" placeholder="Umhlanga" required value="{{ property.suburb if property else '' }}"></label>
+      <label>City<input name="city" placeholder="Durban / Umhlanga" required value="{{ property.city if property else '' }}"></label>
+      <label>Province<input name="province" placeholder="KwaZulu-Natal" required value="{{ property.province if property else '' }}"></label>
+    </div>
+    <label>Description<textarea name="description" required placeholder="Describe the room, safety, transport, rules and nearby work areas.">{{ property.description if property else '' }}</textarea></label>
+    <label>Exact rental address <input class="address-autocomplete" data-place-target="rental_place_id" name="address_line" required placeholder="Street number and street name. Hidden from public until approval." value="{{ property.address_line if property else '' }}" autocomplete="off"><div class="autocomplete-panel" hidden></div></label>
+    <label>Public approximate address<input name="approximate_address" placeholder="e.g. Umhlanga, near Gateway" value="{{ property.approximate_address if property else '' }}"></label>
+    <label>Nearest transport<input name="nearest_transport" placeholder="Taxi rank, bus stop, train station, main road" value="{{ property.nearest_transport if property else '' }}"></label>
+    <label>Commute notes<textarea name="commute_notes" placeholder="Example: 5 min walk to taxi route, 10 min to Umhlanga Ridge offices.">{{ property.commute_notes if property else '' }}</textarea></label>
+    <div class="check-row">
+      <label><input type="checkbox" name="furnished" {% if property and property.furnished %}checked{% endif %}> Furnished</label>
+      <label><input type="checkbox" name="pets_allowed" {% if property and property.pets_allowed %}checked{% endif %}> Pets allowed</label>
+      <label><input type="checkbox" name="transport_access" {% if property and property.transport_access %}checked{% endif %}> Transport nearby</label>
+    </div>
+    <div class="upload-grid">
+      <label>Apartment photos <input type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple {% if not property %}required{% endif %}><span>Upload up to 8 JPG, PNG or WebP photos.</span></label>
+      <label>Proof of house/property registration <input type="file" name="proof_registration" accept="application/pdf,image/jpeg,image/png" {% if not property %}required{% endif %}><span>Private: visible only to you and admin.</span></label>
+      <label>ID document <input type="file" name="id_document" accept="application/pdf,image/jpeg,image/png" {% if not property %}required{% endif %}><span>Private: visible only to you and admin.</span></label>
+    </div>
+    {% if property %}
+      <div class="panel file-manager"><h2>Current files</h2>
+        {% for asset in property.assets %}
+          <div class="asset-row"><span>{{ asset.kind.replace('_',' ') }} — {{ asset.original_filename }} — {{ asset.review_status }}</span>
+            <a class="button small secondary" href="{{ url_for('properties.media', asset_id=asset.id) }}">View</a>
+            {% if asset.kind == 'photo' %}<button class="small secondary" formaction="{{ url_for('properties.primary_asset', asset_id=asset.id) }}">Make main</button>{% endif %}
+            <button class="small danger" formaction="{{ url_for('properties.delete_asset', asset_id=asset.id) }}" onclick="return confirm('Remove this file?')">Delete</button>
+          </div>
+        {% else %}<p>No files uploaded yet.</p>{% endfor %}
+      </div>
+    {% endif %}
+    <button>{% if property %}Save changes{% else %}Create listing{% endif %}</button>
+  </form>
+</section>
+{% endblock %}
