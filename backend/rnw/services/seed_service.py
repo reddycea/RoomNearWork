@@ -14,7 +14,6 @@ from backend.rnw.services.subscription_service import ensure_default_plans
 
 
 DEMO_PASSWORDS = {
-    "admin@rnw.local": "AdminPass123!",
     "tenant@rnw.local": "TenantPass123!",
     "landlord@rnw.local": "LandlordPass123!",
     "pending-landlord@rnw.local": "PendingPass123!",
