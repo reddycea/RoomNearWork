@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="dashboard">
+  <div class="section-head"><h1>Landlord dashboard</h1><a class="button" href="{{ url_for('properties.create') }}">Create listing</a></div>
+  <div class="grid-two">
+    <div class="panel"><h2>Your listings</h2>
+      {% for p in properties %}
+        <div class="landlord-listing-row"><strong>{{ p.title }}</strong><br>{{ p.status }}{% if p.status_reason %} — {{ p.status_reason }}{% endif %} • views {{ p.view_count }} • quality {{ p.quality_score }}%{% if p.average_rating() %} • ★ {{ p.average_rating() }} from {{ p.review_count() }} review{{ '' if p.review_count() == 1 else 's' }}{% endif %}
+          <div class="row-actions">
+            <a class="button small secondary" href="{{ url_for('properties.edit', property_id=p.id) }}">Edit</a>
+            <form method="post" action="{{ url_for('marketplace.renew_property', property_id=p.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="small">Renew</button></form>
+            <form method="post" action="{{ url_for('properties.archive', property_id=p.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="small danger" onclick="return confirm('Archive listing?')">Archive</button></form>
+          </div>
+        </div>
+      {% else %}<p>No listings yet.</p>{% endfor %}
+    </div>
+    <div class="panel"><h2>Applications</h2>{% for app in applications %}<p><strong>{{ app.property.title }}</strong> from {{ app.applicant.full_name }}<br>{{ app.status }}</p>{% else %}<p>No applications.</p>{% endfor %}</div>
+  </div>
+</section>
+{% endblock %}
