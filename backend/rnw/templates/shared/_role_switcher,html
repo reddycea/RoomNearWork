@@ -1,10 +1,25 @@
-{% if current_user.is_authenticated and current_user.available_roles is defined %}
-<form method="post" action="{{ url_for('marketplace.switch_role') }}" class="role-switcher">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <select name="role" onchange="this.form.submit()" aria-label="Switch active role">
-    {% for role in current_user.available_roles() %}
-      {% if role != 'admin' %}<option value="{{ role }}" {% if current_user.role == role %}selected{% endif %}>{{ role|title }}</option>{% endif %}
-    {% endfor %}
-  </select>
-</form>
+{% if current_user.is_authenticated %}
+  {% set roles = current_user.available_roles() %}
+
+  {% if 'tenant' in roles or 'landlord' in roles %}
+    <div class="role-switcher">
+      {% if 'tenant' in roles %}
+        <form method="post" action="{{ url_for('profile.switch_role', role='tenant') }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm btn-outline-primary">
+            Tenant
+          </button>
+        </form>
+      {% endif %}
+
+      {% if 'landlord' in roles %}
+        <form method="post" action="{{ url_for('profile.switch_role', role='landlord') }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm btn-outline-success">
+            Landlord
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  {% endif %}
 {% endif %}
