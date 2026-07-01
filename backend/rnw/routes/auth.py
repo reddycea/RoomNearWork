@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pyotp
+import re
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy.exc import IntegrityError
@@ -20,14 +21,62 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 def register():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
-        full_name = clean_user_text(request.form.get("full_name"), 160)
+        first_name = clean_user_text(request.form.get("first_name"), 80)
+        last_name = clean_user_text(request.form.get("last_name"), 80)
+        phone = request.form.get("phone", "").strip()
+        id_number = request.form.get("id_number", "").strip()
+        reference_code = clean_user_text(request.form.get("reference_code"), 80)
         password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        phone = re.sub(r"\s+", "", phone)
+        id_number = re.sub(r"\s+", "", id_number)
+
+        if not first_name or not last_name:
+            flash("First name and last name are required.", "danger")
+            return render_template("auth/register.html")
+
+        if not email:
+            flash("Email is required.", "danger")
+            return render_template("auth/register.html")
+
+        if not phone:
+            flash("Phone number is required.", "danger")
+            return render_template("auth/register.html")
+
+        if not id_number:
+            flash("ID number is required.", "danger")
+            return render_template("auth/register.html")
+
+        if not id_number.isdigit():
+            flash("ID number must contain numbers only.", "danger")
+            return render_template("auth/register.html")
+
+        if password != confirm_password:
+            flash("Passwords do not match.", "danger")
+            return render_template("auth/register.html")
+
         if not password_is_strong(password):
             flash("Use at least 8 characters with uppercase, lowercase and a number.", "danger")
             return render_template("auth/register.html")
-        user = User(email=email, full_name=full_name, role="tenant", can_act_as_tenant=True, can_act_as_landlord=False)
+
+        full_name = f"{first_name} {last_name}".strip()
+
+        user = User(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            full_name=full_name,
+            phone=phone,
+            id_number=id_number,
+            reference_code=reference_code or None,
+            role="tenant",
+            can_act_as_tenant=True,
+            can_act_as_landlord=False,
+        )
+
         user.set_password(password)
         db.session.add(user)
+
         try:
             db.session.flush()
             verification_url = send_verification_email(user)
@@ -35,13 +84,16 @@ def register():
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
-            flash("An account with that email already exists.", "danger")
+            flash("An account with that email or ID number already exists.", "danger")
             return render_template("auth/register.html")
+
         login_user(user)
         flash("Account created. Check your email to verify your account.", "success")
+
         if verification_url:
             flash(f"Development verification link: {verification_url}", "info")
-        return redirect(url_for("auth.choose_role"))
+
+        return redirect(url_for("auth.choose_role")))
     return render_template("auth/register.html")
 
 
