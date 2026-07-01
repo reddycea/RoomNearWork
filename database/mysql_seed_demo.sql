@@ -1,3 +1,0 @@
--- Demo seed helper
--- Prefer: flask --app backend.app:create_app seed-db
--- The Flask command creates secure password hashes and demo records that match the current models.
