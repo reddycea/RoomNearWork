@@ -1,8 +1,4 @@
 BEGIN;
--- ============================================================
--- 1. USERS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) NOT NULL,
@@ -14,8 +10,6 @@ CREATE TABLE IF NOT EXISTS users (
 
     role VARCHAR(30) NOT NULL DEFAULT 'tenant',
     can_act_as_tenant BOOLEAN NOT NULL DEFAULT TRUE,
-
-    -- Updated final default from new landlord flow
     can_act_as_landlord BOOLEAN NOT NULL DEFAULT FALSE,
 
     is_admin BOOLEAN NOT NULL DEFAULT FALSE,
@@ -129,10 +123,6 @@ BEGIN
 END $$;
 
 
--- ============================================================
--- 2. SUBSCRIPTION PLANS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS subscription_plans (
     id SERIAL PRIMARY KEY,
     name VARCHAR(120) NOT NULL,
@@ -182,10 +172,6 @@ SET max_rental_applications = 0
 WHERE role = 'landlord';
 
 
--- ============================================================
--- 3. PAYMENT WEBHOOK LOGS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS payment_webhook_logs (
     id SERIAL PRIMARY KEY,
     provider VARCHAR(40) NOT NULL,
@@ -197,10 +183,6 @@ CREATE TABLE IF NOT EXISTS payment_webhook_logs (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-
--- ============================================================
--- 4. TAXI RANKS
--- ============================================================
 
 CREATE TABLE IF NOT EXISTS taxi_ranks (
     id SERIAL PRIMARY KEY,
@@ -235,10 +217,6 @@ CREATE INDEX IF NOT EXISTS ix_taxi_ranks_is_active
 ON taxi_ranks(is_active);
 
 
--- ============================================================
--- 5. SUPPORT TICKETS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS support_tickets (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NULL REFERENCES users(id),
@@ -257,10 +235,6 @@ ON support_tickets(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_support_tickets_public_token
 ON support_tickets(public_token);
 
-
--- ============================================================
--- 6. PROPERTIES
--- ============================================================
 
 CREATE TABLE IF NOT EXISTS properties (
     id SERIAL PRIMARY KEY,
@@ -426,10 +400,6 @@ CREATE INDEX IF NOT EXISTS ix_properties_geo
 ON properties(latitude, longitude);
 
 
--- ============================================================
--- 7. PROPERTY ASSETS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS property_assets (
     id SERIAL PRIMARY KEY,
     property_id INTEGER NOT NULL REFERENCES properties(id),
@@ -478,10 +448,6 @@ CREATE INDEX IF NOT EXISTS ix_property_assets_review
 ON property_assets(kind, review_status);
 
 
--- ============================================================
--- 8. RENTAL APPLICATIONS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS rental_applications (
     id SERIAL PRIMARY KEY,
     property_id INTEGER NOT NULL REFERENCES properties(id),
@@ -515,10 +481,6 @@ CREATE INDEX IF NOT EXISTS ix_rental_applications_tenant_subscription_id
 ON rental_applications(tenant_subscription_id);
 
 
--- ============================================================
--- 9. USER SUBSCRIPTIONS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS user_subscriptions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
@@ -539,8 +501,6 @@ ON user_subscriptions(role);
 CREATE INDEX IF NOT EXISTS ix_user_subscriptions_status
 ON user_subscriptions(status);
 
-
--- Add rental_applications FK after user_subscriptions exists
 UPDATE rental_applications
 SET tenant_subscription_id = NULL
 WHERE tenant_subscription_id IS NOT NULL
@@ -562,11 +522,6 @@ BEGIN
         ON DELETE SET NULL;
     END IF;
 END $$;
-
-
--- ============================================================
--- 10. INVOICES
--- ============================================================
 
 CREATE TABLE IF NOT EXISTS invoices (
     id SERIAL PRIMARY KEY,
@@ -592,10 +547,6 @@ CREATE INDEX IF NOT EXISTS ix_invoices_status
 ON invoices(status);
 
 
--- ============================================================
--- 11. LISTING REPORTS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS listing_reports (
     id SERIAL PRIMARY KEY,
     property_id INTEGER NOT NULL REFERENCES properties(id),
@@ -617,10 +568,6 @@ CREATE INDEX IF NOT EXISTS ix_listing_reports_status
 ON listing_reports(status);
 
 
--- ============================================================
--- 12. LANDLORD VERIFICATIONS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS landlord_verifications (
     id SERIAL PRIMARY KEY,
     landlord_id INTEGER NOT NULL REFERENCES users(id),
@@ -638,10 +585,6 @@ ON landlord_verifications(landlord_id);
 CREATE INDEX IF NOT EXISTS ix_landlord_verifications_status
 ON landlord_verifications(status);
 
-
--- ============================================================
--- 13. LANDLORD APPLICATIONS - NEW TABLE
--- ============================================================
 
 CREATE TABLE IF NOT EXISTS landlord_applications (
     id SERIAL PRIMARY KEY,
@@ -737,10 +680,6 @@ CREATE INDEX IF NOT EXISTS ix_landlord_applications_status_created
 ON landlord_applications(status, created_at);
 
 
--- ============================================================
--- 14. SAVED SEARCHES
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS saved_searches (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
@@ -790,10 +729,6 @@ CREATE INDEX IF NOT EXISTS ix_saved_searches_workplace_area
 ON saved_searches(workplace_area);
 
 
--- ============================================================
--- 15. CONVERSATION THREADS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS conversation_threads (
     id SERIAL PRIMARY KEY,
     property_id INTEGER NOT NULL REFERENCES properties(id),
@@ -818,10 +753,6 @@ CREATE INDEX IF NOT EXISTS ix_conversation_threads_landlord_id
 ON conversation_threads(landlord_id);
 
 
--- ============================================================
--- 16. CONVERSATION MESSAGES
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS conversation_messages (
     id SERIAL PRIMARY KEY,
     thread_id INTEGER NOT NULL REFERENCES conversation_threads(id),
@@ -838,10 +769,6 @@ ON conversation_messages(thread_id);
 CREATE INDEX IF NOT EXISTS ix_conversation_messages_sender_id
 ON conversation_messages(sender_id);
 
-
--- ============================================================
--- 17. VIEWING APPOINTMENTS
--- ============================================================
 
 CREATE TABLE IF NOT EXISTS viewing_appointments (
     id SERIAL PRIMARY KEY,
@@ -870,10 +797,6 @@ CREATE INDEX IF NOT EXISTS ix_viewing_appointments_status
 ON viewing_appointments(status);
 
 
--- ============================================================
--- 18. USER AUDIT LOGS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS user_audit_logs (
     id SERIAL PRIMARY KEY,
     actor_id INTEGER NULL REFERENCES users(id),
@@ -894,10 +817,6 @@ CREATE INDEX IF NOT EXISTS ix_user_audit_logs_action
 ON user_audit_logs(action);
 
 
--- ============================================================
--- 19. EMAIL VERIFICATION TOKENS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS email_verification_tokens (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
@@ -915,10 +834,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_email_verification_tokens_token_hash
 ON email_verification_tokens(token_hash);
 
 
--- ============================================================
--- 20. PASSWORD RESET TOKENS
--- ============================================================
-
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
@@ -935,10 +850,6 @@ ON password_reset_tokens(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_password_reset_tokens_token_hash
 ON password_reset_tokens(token_hash);
 
-
--- ============================================================
--- 21. PLACES SESSIONS
--- ============================================================
 
 CREATE TABLE IF NOT EXISTS places_sessions (
     id SERIAL PRIMARY KEY,
@@ -959,10 +870,6 @@ ON places_sessions(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_places_sessions_token_hash
 ON places_sessions(token_hash);
 
-
--- ============================================================
--- 22. RENTAL REVIEWS
--- ============================================================
 
 CREATE TABLE IF NOT EXISTS rental_reviews (
     id SERIAL PRIMARY KEY,
@@ -1006,13 +913,6 @@ ON rental_reviews(landlord_id);
 CREATE INDEX IF NOT EXISTS ix_rental_reviews_status
 ON rental_reviews(status);
 
-
--- ============================================================
--- 23. DEFAULT SUBSCRIPTION PLAN DATA
--- Matches backend/rnw/services/subscription_service.py
--- Tenant Plus: R50, 10 rental applications
--- Landlord Pro: R100, 25 active listings
--- ============================================================
 
 INSERT INTO subscription_plans (
     name,
@@ -1058,10 +958,6 @@ DO UPDATE SET
     is_active = TRUE,
     updated_at = CURRENT_TIMESTAMP;
 
-
--- ============================================================
--- 24. FINAL SAFETY FIXES
--- ============================================================
 
 UPDATE subscription_plans
 SET currency = 'ZAR'
@@ -1114,11 +1010,6 @@ WHERE rent_amount = 0
 
 COMMIT;
 
-
--- ============================================================
--- 25. VERIFY RESULT
--- Run output should show the important new/old tables and columns.
--- ============================================================
 
 SELECT table_name
 FROM information_schema.tables
