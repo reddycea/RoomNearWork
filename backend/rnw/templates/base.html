@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0B63F6">
   <title>{% block title %}Room Near Work{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/uber.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -14,7 +14,6 @@
     <nav class="navlinks" aria-label="Main navigation">
       <a href="{{ url_for('properties.index') }}">Find rentals</a>
       {% if current_user.is_authenticated %}
-        {% include 'shared/_role_switcher.html' %}
         {% if current_user.role == 'tenant' %}<a href="{{ url_for('tenant.dashboard') }}">Tenant</a>{% endif %}
         {% if current_user.role == 'landlord' %}<a href="{{ url_for('landlord.dashboard') }}">Landlord</a>{% endif %}
         {% if current_user.role == 'landlord' %}<a class="nav-cta" href="{{ url_for('properties.create') }}">Add rental</a>{% endif %}
