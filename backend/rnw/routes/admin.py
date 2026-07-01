@@ -96,7 +96,9 @@ def moderate_property(property_id: int, action: str):
     return redirect(url_for("admin.verifications"))
 
 @admin_bp.get("/landlord-applications")
-@roles_required("admin")
+@login_required
+@admin_required
+@two_factor_required
 def landlord_applications():
     status = request.args.get("status", "pending")
 
@@ -115,7 +117,9 @@ def landlord_applications():
 
 
 @admin_bp.post("/landlord-applications/<int:application_id>/<action>")
-@roles_required("admin")
+@login_required
+@admin_required
+@two_factor_required
 def landlord_application_action(application_id: int, action: str):
     application = (
         db.session.execute(
@@ -135,13 +139,13 @@ def landlord_application_action(application_id: int, action: str):
 
     if action == "approve":
         application.approve(current_user.id)
-        log_admin_action("approve_landlord_application", "landlord_application", application.id)
+        log_action("approve_landlord_application", "landlord_application", application.id)
         flash("Landlord application approved.", "success")
 
     elif action == "reject":
         note = request.form.get("admin_note")
         application.reject(note=note, admin_id=current_user.id)
-        log_admin_action("reject_landlord_application", "landlord_application", application.id)
+        log_action("reject_landlord_application", "landlord_application", application.id)
         flash("Landlord application rejected.", "success")
 
     else:
