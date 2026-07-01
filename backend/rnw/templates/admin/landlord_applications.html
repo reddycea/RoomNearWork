@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block title %}Landlord applications — Admin{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+  <h1>Landlord applications</h1>
+
+  <div class="mb-3">
+    <a href="{{ url_for('admin.landlord_applications', status='pending') }}">Pending</a>
+    |
+    <a href="{{ url_for('admin.landlord_applications', status='approved') }}">Approved</a>
+    |
+    <a href="{{ url_for('admin.landlord_applications', status='rejected') }}">Rejected</a>
+  </div>
+
+  {% if applications %}
+    <div class="table-responsive">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Message</th>
+            <th>Status</th>
+            <th>Submitted</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for application in applications %}
+            <tr>
+              <td>{{ application.applicant.full_name }}</td>
+              <td>{{ application.applicant.email }}</td>
+              <td>{{ application.applicant.phone or '-' }}</td>
+              <td>{{ application.message or '-' }}</td>
+              <td>{{ application.status|title }}</td>
+              <td>{{ application.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+              <td>
+                {% if application.status == 'pending' %}
+                  <form
+                    method="post"
+                    action="{{ url_for('admin.landlord_application_action', application_id=application.id, action='approve') }}"
+                    class="d-inline"
+                  >
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-success">
+                      Approve
+                    </button>
+                  </form>
+
+                  <form
+                    method="post"
+                    action="{{ url_for('admin.landlord_application_action', application_id=application.id, action='reject') }}"
+                    class="mt-2"
+                  >
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input
+                      name="admin_note"
+                      class="form-control form-control-sm mb-1"
+                      placeholder="Reason for rejection"
+                    >
+                    <button type="submit" class="btn btn-sm btn-danger">
+                      Reject
+                    </button>
+                  </form>
+                {% else %}
+                  Reviewed
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No landlord applications found.</p>
+  {% endif %}
+</section>
+{% endblock %}
