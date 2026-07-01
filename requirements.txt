@@ -27,5 +27,7 @@ ruff>=0.5,<1
 bandit>=1.7,<2
 pip-audit>=2.7,<3
 detect-secrets>=1.5,<2
-
 requests>=2.32,<3
+streamlit>=1.36,<2
+pandas>=2.2,<3
+pyotp>=2.9,<3
