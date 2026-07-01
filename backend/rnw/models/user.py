@@ -14,8 +14,12 @@ class User(UserMixin, TimestampMixin, db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, index=True, nullable=False)
+    first_name = db.Column(db.String(80), nullable=False)
+    last_name = db.Column(db.String(80), nullable=False)
     full_name = db.Column(db.String(160), nullable=False)
-    phone = db.Column(db.String(40))
+    phone = db.Column(db.String(40), nullable=False)
+    id_number = db.Column(db.String(20), unique=True, index=True, nullable=False)
+    reference_code = db.Column(db.String(80), index=True)
     password_hash = db.Column(db.String(255), nullable=False)
 
     role = db.Column(db.String(30), default="tenant", nullable=False)  # active role
