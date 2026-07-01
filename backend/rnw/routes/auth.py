@@ -23,7 +23,7 @@ def register():
         email = request.form.get("email", "").strip().lower()
         first_name = clean_user_text(request.form.get("first_name"), 80)
         last_name = clean_user_text(request.form.get("last_name"), 80)
-        phone = request.form.get("phone", "").strip()
+        phone = clean_user_text(request.form.get("phone"), 40)
         id_number = request.form.get("id_number", "").strip()
         reference_code = clean_user_text(request.form.get("reference_code"), 80)
         password = request.form.get("password", "")
