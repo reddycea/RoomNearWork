@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pyotp
 import re
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
@@ -216,21 +215,3 @@ def reset_password(token: str):
         return redirect(url_for("auth.login"))
     return render_template("auth/reset_password.html")
 
-
-@auth_bp.route("/2fa/setup", methods=["GET", "POST"])
-@login_required
-def two_factor_setup():
-    if not current_user.two_factor_secret:
-        current_user.two_factor_secret = pyotp.random_base32()
-        db.session.commit()
-    otp_uri = pyotp.totp.TOTP(current_user.two_factor_secret).provisioning_uri(name=current_user.email, issuer_name="Room Near Work")
-    if request.method == "POST":
-        token = request.form.get("token", "")
-        if pyotp.TOTP(current_user.two_factor_secret).verify(token):
-            current_user.two_factor_enabled = True
-            log_action("admin_2fa_enabled", "User", current_user.id)
-            db.session.commit()
-            flash("Two-factor authentication enabled.", "success")
-            return redirect(url_for("admin.dashboard"))
-        flash("Invalid code.", "danger")
-    return render_template("auth/two_factor_setup.html", otp_uri=otp_uri)
