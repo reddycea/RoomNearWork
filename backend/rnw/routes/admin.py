@@ -4,9 +4,7 @@ from datetime import datetime
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-
-from backend.rnw.extensions import db
-from backend.rnw.models import ListingReport, Property, LandlordApplication, PropertyAsset, RentalReview, SupportTicket, User
+from ..models import (BillingInvoice, LandlordApplication, LandlordVerification, ListingReport, PaymentWebhookLog, Property, PropertyReview, RentalApplication, SubscriptionPlan, SupportTicket, User, UserSubscription,)
 from backend.rnw.services.audit_service import log_action
 from backend.rnw.utils.decorators import admin_required, two_factor_required
 from backend.rnw.utils.security import clean_user_text
@@ -96,6 +94,62 @@ def moderate_property(property_id: int, action: str):
     db.session.commit()
     flash(f"Listing {action}d.", "success")
     return redirect(url_for("admin.verifications"))
+
+@admin_bp.get("/landlord-applications")
+@roles_required("admin")
+def landlord_applications():
+    status = request.args.get("status", "pending")
+
+    query = LandlordApplication.query
+
+    if status:
+        query = query.filter_by(status=status)
+
+    applications = query.order_by(LandlordApplication.created_at.desc()).all()
+
+    return render_template(
+        "admin/landlord_applications.html",
+        applications=applications,
+        status=status,
+    )
+
+
+@admin_bp.post("/landlord-applications/<int:application_id>/<action>")
+@roles_required("admin")
+def landlord_application_action(application_id: int, action: str):
+    application = (
+        db.session.execute(
+            db.select(LandlordApplication)
+            .where(LandlordApplication.id == application_id)
+            .with_for_update()
+        )
+        .scalar_one_or_none()
+    )
+
+    if not application:
+        abort(404)
+
+    if not application.is_pending:
+        flash("This application has already been reviewed.", "info")
+        return redirect(url_for("admin.landlord_applications"))
+
+    if action == "approve":
+        application.approve(current_user.id)
+        log_admin_action("approve_landlord_application", "landlord_application", application.id)
+        flash("Landlord application approved.", "success")
+
+    elif action == "reject":
+        note = request.form.get("admin_note")
+        application.reject(note=note, admin_id=current_user.id)
+        log_admin_action("reject_landlord_application", "landlord_application", application.id)
+        flash("Landlord application rejected.", "success")
+
+    else:
+        abort(400)
+
+    db.session.commit()
+
+    return redirect(url_for("admin.landlord_applications"))
 
 
 @admin_bp.post("/assets/<int:asset_id>/<action>")
