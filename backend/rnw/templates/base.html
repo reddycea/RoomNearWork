@@ -20,8 +20,7 @@
         <a href="{{ url_for('marketplace.messages') }}">Messages</a>
         <a href="{{ url_for('marketplace.viewings') }}">Viewings</a>
         <a href="{{ url_for('profile.index') }}">Profile</a>
-        {% if current_user.is_admin %}<a href="{{ url_for('admin.dashboard') }}">Admin</a>{% endif %}
-        <form method="post" action="{{ url_for('auth.logout') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="nav-button" type="submit">Sign out</button></form>
+      <form method="post" action="{{ url_for('auth.logout') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="nav-button" type="submit">Sign out</button></form>
       {% else %}
         <a href="{{ url_for('auth.login') }}">Log in</a>
         <a class="nav-cta" href="{{ url_for('auth.register') }}">Sign up</a>
