@@ -4,186 +4,136 @@ from datetime import datetime, timedelta
 
 from backend.rnw.extensions import db
 from backend.rnw.models import (
-    ConversationMessage,
-    ConversationThread,
     LandlordApplication,
     Property,
     RentalApplication,
-    RentalReview,
-    SavedSearch,
     TaxiRank,
     User,
-    UserSubscription,
-    ViewingAppointment,
 )
-from backend.rnw.services.google_maps_service import geocode_property_address
-from backend.rnw.services.listing_quality_service import update_listing_quality
 from backend.rnw.services.subscription_service import ensure_default_plans
 
 
+DEMO_PASSWORDS = {
+    "admin@rnw.local": "AdminPass123!",
+    "tenant@rnw.local": "TenantPass123!",
+    "landlord@rnw.local": "LandlordPass123!",
+    "pending-landlord@rnw.local": "PendingPass123!",
+}
+
+
 def _user(
-    email: str,
-    name: str,
-    password: str,
-    role: str,
     *,
+    email: str,
+    first_name: str,
+    last_name: str,
+    phone: str,
+    id_number: str,
+    password: str,
+    role: str = "tenant",
     is_admin: bool = False,
+    can_act_as_tenant: bool = True,
     can_act_as_landlord: bool = False,
 ) -> User:
     user = User.query.filter_by(email=email).one_or_none()
+    full_name = f"{first_name} {last_name}".strip()
 
-    if not user:
-        user = User(email=email)
-        db.session.add(user)
+    if user:
+        user.first_name = user.first_name or first_name
+        user.last_name = user.last_name or last_name
+        user.full_name = user.full_name or full_name
+        user.phone = user.phone or phone
+        user.id_number = user.id_number or id_number
+        user.role = role
+        user.is_admin = is_admin
+        user.can_act_as_tenant = can_act_as_tenant
+        user.can_act_as_landlord = can_act_as_landlord
+        user.email_verified = True
+        user.email_verified_at = user.email_verified_at or datetime.utcnow()
+        return user
 
-    user.full_name = name
-    user.role = role
-    user.can_act_as_tenant = True
-    user.can_act_as_landlord = can_act_as_landlord
-    user.is_admin = is_admin
-    user.is_active_account = True
-    user.email_verified = True
-    user.email_verified_at = user.email_verified_at or datetime.utcnow()
+    user = User(
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        full_name=full_name,
+        phone=phone,
+        id_number=id_number,
+        role=role,
+        is_admin=is_admin,
+        can_act_as_tenant=can_act_as_tenant,
+        can_act_as_landlord=can_act_as_landlord,
+        email_verified=True,
+        email_verified_at=datetime.utcnow(),
+    )
     user.set_password(password)
 
+    db.session.add(user)
     db.session.flush()
+
     return user
 
 
-def _active_subscription(user: User, role: str) -> UserSubscription:
-    from backend.rnw.models import SubscriptionPlan
-
-    plan_name = "Tenant Plus" if role == "tenant" else "Landlord Pro"
-
-    plan = SubscriptionPlan.query.filter_by(name=plan_name).one()
-
-    sub = (
-        UserSubscription.query
-        .filter_by(user_id=user.id, role=role, status="active")
-        .order_by(UserSubscription.created_at.desc())
-        .first()
-    )
-
-    if not sub:
-        sub = UserSubscription(
-            user_id=user.id,
-            plan_id=plan.id,
-            role=role,
-            status="active",
-        )
-        db.session.add(sub)
-
-    sub.plan_id = plan.id
-    sub.status = "active"
-    sub.current_period_end = datetime.utcnow() + timedelta(days=30)
-
-    db.session.flush()
-    return sub
-
-
-def _landlord_application(
-    applicant: User,
-    *,
-    status: str,
-    admin: User | None = None,
-    message: str | None = None,
-    note: str | None = None,
-) -> LandlordApplication:
-    application = (
-        LandlordApplication.query
-        .filter_by(applicant_id=applicant.id)
-        .order_by(LandlordApplication.created_at.desc())
-        .first()
-    )
-
-    if not application:
-        application = LandlordApplication(
-            applicant_id=applicant.id,
-            message=message,
-        )
-        db.session.add(application)
-        db.session.flush()
-
-    application.message = message or application.message
-
-    if status == "approved":
-        application.approve(admin.id if admin else None)
-    elif status == "rejected":
-        application.reject(note, admin.id if admin else None)
-    else:
-        application.status = "pending"
-        application.admin_note = None
-        application.reviewed_by_id = None
-        application.reviewed_at = None
-
-    db.session.flush()
-    return application
-
-
 def _property(
-    landlord: User,
     *,
+    landlord: User,
     title: str,
     description: str,
-    rent: int,
-    deposit: int,
-    bedrooms: int,
-    bathrooms: int,
+    rent_amount: int,
+    deposit_amount: int,
     city: str,
     province: str,
     suburb: str,
-    address: str,
-    furnished: bool,
-    pets_allowed: bool,
-    transport_access: bool,
-    nearest_transport: str,
-    commute_notes: str,
-    image_url: str,
-    admin: User | None = None,
+    address_line: str,
+    latitude: float,
+    longitude: float,
+    furnished: bool = False,
+    pets_allowed: bool = False,
+    transport_access: bool = True,
 ) -> Property:
-    prop = Property.query.filter_by(title=title, landlord_id=landlord.id).one_or_none()
+    existing = Property.query.filter_by(title=title, landlord_id=landlord.id).one_or_none()
 
-    if not prop:
-        prop = Property(landlord_id=landlord.id, title=title)
-        db.session.add(prop)
+    if existing:
+        return existing
 
-    geo = geocode_property_address(address, suburb, city, province)
+    prop = Property(
+        landlord_id=landlord.id,
+        title=title,
+        description=description,
+        rent_amount=rent_amount,
+        deposit_amount=deposit_amount,
+        bedrooms=1,
+        bathrooms=1,
+        city=city,
+        province=province,
+        suburb=suburb,
+        address_line=address_line,
+        formatted_address=f"{address_line}, {suburb}, {city}, {province}, South Africa",
+        approximate_address=f"{suburb}, {city}",
+        address_visibility="approved_viewing",
+        latitude=latitude,
+        longitude=longitude,
+        workplace_distance_km=3.5,
+        nearest_transport="Taxi route nearby" if transport_access else None,
+        commute_notes="Demo commute data for testing Room Near Work.",
+        furnished=furnished,
+        pets_allowed=pets_allowed,
+        transport_access=transport_access,
+        status="available",
+        is_active=True,
+        quality_score=80,
+        listing_verified=True,
+        verified_at=datetime.utcnow(),
+        expires_at=datetime.utcnow() + timedelta(days=30),
+    )
 
-    prop.description = description
-    prop.rent_amount = rent
-    prop.deposit_amount = deposit
-    prop.bedrooms = bedrooms
-    prop.bathrooms = bathrooms
-    prop.city = city
-    prop.province = province
-    prop.suburb = suburb
-    prop.address_line = address
-    prop.formatted_address = geo.formatted_address
-    prop.google_place_id = geo.place_id
-    prop.approximate_address = f"{suburb}, {city}"
-    prop.latitude = geo.latitude
-    prop.longitude = geo.longitude
-    prop.furnished = furnished
-    prop.pets_allowed = pets_allowed
-    prop.transport_access = transport_access
-    prop.nearest_transport = nearest_transport
-    prop.commute_notes = commute_notes
-    prop.image_url = image_url
-    prop.status = "available"
-    prop.status_reason = None
-    prop.is_active = True
-    prop.listing_verified = True
-    prop.verified_at = prop.verified_at or datetime.utcnow()
-    prop.verified_by_id = admin.id if admin else None
-    prop.expires_at = datetime.utcnow() + timedelta(days=45)
-
-    update_listing_quality(prop)
-
+    db.session.add(prop)
     db.session.flush()
+
     return prop
 
 
 def _taxi_rank(
+    *,
     name: str,
     suburb: str,
     city: str,
@@ -192,457 +142,260 @@ def _taxi_rank(
     longitude: float,
     notes: str,
 ) -> TaxiRank:
-    rank = TaxiRank.query.filter_by(name=name).one_or_none()
+    existing = TaxiRank.query.filter_by(name=name).one_or_none()
 
-    if not rank:
-        rank = TaxiRank(name=name)
-        db.session.add(rank)
+    if existing:
+        return existing
 
-    rank.suburb = suburb
-    rank.city = city
-    rank.province = province
-    rank.latitude = latitude
-    rank.longitude = longitude
-    rank.notes = notes
-    rank.is_active = True
+    rank = TaxiRank(
+        name=name,
+        suburb=suburb,
+        city=city,
+        province=province,
+        latitude=latitude,
+        longitude=longitude,
+        notes=notes,
+        is_active=True,
+    )
 
+    db.session.add(rank)
     db.session.flush()
+
     return rank
 
 
-def _saved_search(
-    user: User,
-    *,
-    name: str,
-    city: str,
-    province: str,
-    max_rent: int,
-    workplace_address: str,
-    workplace_area: str,
-) -> SavedSearch:
-    search = SavedSearch.query.filter_by(user_id=user.id, name=name).one_or_none()
-
-    if not search:
-        search = SavedSearch(user_id=user.id, name=name)
-        db.session.add(search)
-
-    search.city = city
-    search.province = province
-    search.max_rent = max_rent
-    search.min_bedrooms = 1
-    search.furnished = None
-    search.pets_allowed = None
-    search.transport_access = True
-    search.workplace_address = workplace_address
-    search.workplace_formatted_address = workplace_address
-    search.workplace_area = workplace_area
-    search.travel_mode = "taxi"
-    search.max_distance_km = 20
-    search.max_travel_minutes = 45
-    search.alerts_enabled = True
-
-    db.session.flush()
-    return search
-
-
-def _rental_application(
-    tenant: User,
-    prop: Property,
-    tenant_subscription: UserSubscription,
-    *,
-    message: str,
-    status: str = "pending",
-) -> RentalApplication:
-    application = RentalApplication.query.filter_by(
-        property_id=prop.id,
-        applicant_id=tenant.id,
+def _landlord_application(applicant: User, message: str) -> LandlordApplication:
+    existing = LandlordApplication.query.filter_by(
+        applicant_id=applicant.id,
+        status="pending",
     ).one_or_none()
 
-    if not application:
-        application = RentalApplication(
-            property_id=prop.id,
-            applicant_id=tenant.id,
-        )
-        db.session.add(application)
+    if existing:
+        return existing
 
-    application.tenant_subscription_id = tenant_subscription.id
-    application.message = message
-    application.status = status
+    application = LandlordApplication(
+        applicant_id=applicant.id,
+        status="pending",
+        message=message,
+    )
 
+    db.session.add(application)
     db.session.flush()
+
     return application
 
 
-def _conversation(
-    tenant: User,
-    landlord: User,
-    prop: Property,
-) -> ConversationThread:
-    thread = ConversationThread.query.filter_by(
-        property_id=prop.id,
-        tenant_id=tenant.id,
-        landlord_id=landlord.id,
-    ).one_or_none()
-
-    if not thread:
-        thread = ConversationThread(
-            property_id=prop.id,
-            tenant_id=tenant.id,
-            landlord_id=landlord.id,
-            status="open",
-        )
-        db.session.add(thread)
-        db.session.flush()
-
-    thread.last_message_at = datetime.utcnow()
-
-    if ConversationMessage.query.filter_by(thread_id=thread.id).count() == 0:
-        db.session.add(
-            ConversationMessage(
-                thread_id=thread.id,
-                sender_id=tenant.id,
-                body="Hi, I am interested in this room. Is it still available?",
-            )
-        )
-        db.session.add(
-            ConversationMessage(
-                thread_id=thread.id,
-                sender_id=landlord.id,
-                body="Yes, it is still available. You can request a viewing.",
-            )
-        )
-
-    db.session.flush()
-    return thread
-
-
-def _viewing(
-    tenant: User,
-    landlord: User,
-    prop: Property,
-) -> ViewingAppointment:
-    viewing = ViewingAppointment.query.filter_by(
-        property_id=prop.id,
-        tenant_id=tenant.id,
-        landlord_id=landlord.id,
-    ).first()
-
-    if not viewing:
-        start = datetime.utcnow() + timedelta(days=2, hours=2)
-        viewing = ViewingAppointment(
-            property_id=prop.id,
-            tenant_id=tenant.id,
-            landlord_id=landlord.id,
-            requested_start=start,
-            requested_end=start + timedelta(minutes=45),
-            status="approved",
-            tenant_note="I can view after work.",
-            landlord_note="Approved. Please bring ID.",
-        )
-        db.session.add(viewing)
-
-    db.session.flush()
-    return viewing
-
-
-def _review(
-    tenant: User,
-    landlord: User,
-    prop: Property,
+def _rental_application(
     *,
-    rating: int,
-    title: str,
-    comment: str,
-    admin: User | None = None,
-) -> RentalReview:
-    review = RentalReview.query.filter_by(
-        property_id=prop.id,
-        tenant_id=tenant.id,
+    applicant: User,
+    rental_property: Property,
+    message: str,
+) -> RentalApplication:
+    existing = RentalApplication.query.filter_by(
+        applicant_id=applicant.id,
+        property_id=rental_property.id,
     ).one_or_none()
 
-    if not review:
-        review = RentalReview(
-            property_id=prop.id,
-            tenant_id=tenant.id,
-            landlord_id=landlord.id,
-        )
-        db.session.add(review)
+    if existing:
+        return existing
 
-    review.rating = rating
-    review.accuracy_rating = rating
-    review.safety_rating = rating
-    review.commute_rating = rating
-    review.landlord_communication_rating = rating
-    review.title = title
-    review.comment = comment
-    review.status = "approved"
-    review.reviewed_by_id = admin.id if admin else None
-    review.reviewed_at = review.reviewed_at or datetime.utcnow()
+    application = RentalApplication(
+        applicant_id=applicant.id,
+        property_id=rental_property.id,
+        message=message,
+        status="pending",
+    )
 
+    db.session.add(application)
     db.session.flush()
-    return review
+
+    return application
 
 
 def seed_database() -> None:
-    """
-    Seed RoomNearWork with demo users, subscriptions, listings,
-    landlord applications, tenant activity, taxi ranks and reviews.
-
-    Safe to run multiple times.
-    """
-
     ensure_default_plans()
-    db.session.flush()
 
     admin = _user(
-        "admin@rnw.local",
-        "RNW Admin",
-        "AdminPass123!",
-        "admin",
+        email="admin@rnw.local",
+        first_name="RNW",
+        last_name="Admin",
+        phone="+270600000001",
+        id_number="9001015000001",
+        password=DEMO_PASSWORDS["admin@rnw.local"],
+        role="admin",
         is_admin=True,
+        can_act_as_tenant=True,
         can_act_as_landlord=True,
     )
 
     landlord = _user(
-        "landlord@rnw.local",
-        "Lebo Landlord",
-        "LandlordPass123!",
-        "landlord",
+        email="landlord@rnw.local",
+        first_name="Lebo",
+        last_name="Landlord",
+        phone="+270600000002",
+        id_number="9001015000002",
+        password=DEMO_PASSWORDS["landlord@rnw.local"],
+        role="landlord",
+        can_act_as_tenant=True,
         can_act_as_landlord=True,
     )
 
     tenant = _user(
-        "tenant@rnw.local",
-        "Tumi Tenant",
-        "TenantPass123!",
-        "tenant",
+        email="tenant@rnw.local",
+        first_name="Tumi",
+        last_name="Tenant",
+        phone="+270600000003",
+        id_number="9001015000003",
+        password=DEMO_PASSWORDS["tenant@rnw.local"],
+        role="tenant",
+        can_act_as_tenant=True,
         can_act_as_landlord=False,
     )
 
     pending_landlord = _user(
-        "pending-landlord@rnw.local",
-        "Ayanda Pending",
-        "PendingPass123!",
-        "tenant",
+        email="pending-landlord@rnw.local",
+        first_name="Sizwe",
+        last_name="Applicant",
+        phone="+270600000004",
+        id_number="9001015000004",
+        password=DEMO_PASSWORDS["pending-landlord@rnw.local"],
+        role="tenant",
+        can_act_as_tenant=True,
         can_act_as_landlord=False,
     )
 
-    _landlord_application(
-        landlord,
-        status="approved",
-        admin=admin,
-        message="I own and manage rooms suitable for workers and students.",
-    )
-
-    _landlord_application(
-        pending_landlord,
-        status="pending",
-        admin=admin,
-        message="I want to list two rooms near transport routes.",
-    )
-
-    tenant_subscription = _active_subscription(tenant, "tenant")
-    _active_subscription(landlord, "landlord")
-
-    properties = [
-        _property(
-            landlord,
-            title="Compact room near Sandton",
-            description=(
-                "A secure modern room with fast access to Sandton offices, taxi routes, "
-                "shops and daily services. Ideal for a young professional looking for a "
-                "clean and reliable commute."
-            ),
-            rent=3500,
-            deposit=3500,
-            bedrooms=1,
-            bathrooms=1,
-            city="Johannesburg",
-            province="Gauteng",
-            suburb="Sandton",
-            address="12 Rivonia Road",
-            furnished=True,
-            pets_allowed=False,
-            transport_access=True,
-            nearest_transport="Sandton taxi rank and Gautrain bus routes",
-            commute_notes="Good access to Sandton CBD, Rivonia Road and nearby office parks.",
-            image_url="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267",
-            admin=admin,
+    prop1 = _property(
+        landlord=landlord,
+        title="Compact room near Sandton",
+        description=(
+            "A secure modern room with quick access to transport and major work nodes. "
+            "Ideal for a young professional looking for a clean commute."
         ),
-        _property(
-            landlord,
-            title="Sunny apartment close to Braamfontein CBD",
-            description=(
-                "Bright apartment with natural light, simple finishes and fast access to "
-                "Braamfontein, Park Station, Wits and Johannesburg CBD workplaces."
-            ),
-            rent=5200,
-            deposit=5200,
-            bedrooms=1,
-            bathrooms=1,
-            city="Johannesburg",
-            province="Gauteng",
-            suburb="Braamfontein",
-            address="22 Jorissen Street",
-            furnished=False,
-            pets_allowed=False,
-            transport_access=True,
-            nearest_transport="Park Station and Noord taxi routes",
-            commute_notes="Strong public transport access into central Johannesburg.",
-            image_url="https://images.unsplash.com/photo-1502672260266-1c1ef2d93688",
-            admin=admin,
-        ),
-        _property(
-            landlord,
-            title="Quiet room near Umhlanga offices",
-            description=(
-                "Quiet lock-up room in a shared home near Umhlanga offices, malls, taxi "
-                "routes and coastal work opportunities. Suitable for weekly commuting "
-                "professionals."
-            ),
-            rent=4200,
-            deposit=4200,
-            bedrooms=1,
-            bathrooms=1,
-            city="Umhlanga",
-            province="KwaZulu-Natal",
-            suburb="Umhlanga",
-            address="11 Park Avenue",
-            furnished=True,
-            pets_allowed=False,
-            transport_access=True,
-            nearest_transport="Gateway and Umhlanga taxi pickup points",
-            commute_notes="Convenient for Gateway, Umhlanga Ridge and nearby office parks.",
-            image_url="https://images.unsplash.com/photo-1560448204-e02f11c3d0e2",
-            admin=admin,
-        ),
-        _property(
-            landlord,
-            title="Affordable room near Phoenix taxi routes",
-            description=(
-                "Budget-friendly room with transport access into Umhlanga and Durban. "
-                "Good for shift workers, students and weekly commuters who need an "
-                "affordable base."
-            ),
-            rent=2800,
-            deposit=2800,
-            bedrooms=1,
-            bathrooms=1,
-            city="Durban",
-            province="KwaZulu-Natal",
-            suburb="Phoenix",
-            address="19 Phoenix Highway",
-            furnished=False,
-            pets_allowed=False,
-            transport_access=True,
-            nearest_transport="Phoenix taxi routes",
-            commute_notes="Useful access toward Durban, Gateway and surrounding areas.",
-            image_url="https://images.unsplash.com/photo-1493809842364-78817add7ffb",
-            admin=admin,
-        ),
-    ]
-
-    taxi_ranks = [
-        (
-            "Gateway / Umhlanga taxi pickup",
-            "Umhlanga",
-            "Umhlanga",
-            "KwaZulu-Natal",
-            -29.7245,
-            31.0651,
-            "Demo taxi-rank record for Umhlanga commute testing.",
-        ),
-        (
-            "Durban Station taxi rank",
-            "CBD",
-            "Durban",
-            "KwaZulu-Natal",
-            -29.8519,
-            31.0256,
-            "Major Durban public transport interchange.",
-        ),
-        (
-            "Sandton taxi rank",
-            "Sandton",
-            "Johannesburg",
-            "Gauteng",
-            -26.1062,
-            28.0560,
-            "Demo taxi-rank record for Sandton workplace commute testing.",
-        ),
-        (
-            "Noord taxi rank",
-            "CBD",
-            "Johannesburg",
-            "Gauteng",
-            -26.1980,
-            28.0462,
-            "Demo taxi-rank record for central Johannesburg.",
-        ),
-        (
-            "Park Station taxi rank",
-            "Braamfontein",
-            "Johannesburg",
-            "Gauteng",
-            -26.1952,
-            28.0416,
-            "Demo transport node for Braamfontein and Johannesburg CBD.",
-        ),
-    ]
-
-    for rank in taxi_ranks:
-        _taxi_rank(*rank)
-
-    _saved_search(
-        tenant,
-        name="Work near Sandton under R4000",
+        rent_amount=3500,
+        deposit_amount=3500,
         city="Johannesburg",
         province="Gauteng",
-        max_rent=4000,
-        workplace_address="Sandton City, Johannesburg",
-        workplace_area="Sandton",
+        suburb="Sandton",
+        address_line="12 Rivonia Road",
+        latitude=-26.1076,
+        longitude=28.0567,
+        furnished=True,
+        pets_allowed=False,
+        transport_access=True,
     )
 
-    _saved_search(
-        tenant,
-        name="Umhlanga taxi access",
+    _property(
+        landlord=landlord,
+        title="Sunny apartment close to Braamfontein CBD",
+        description=(
+            "Bright apartment with natural light, simple finishes and quick access "
+            "to taxi routes, shops and workplaces."
+        ),
+        rent_amount=5200,
+        deposit_amount=5200,
+        city="Johannesburg",
+        province="Gauteng",
+        suburb="Braamfontein",
+        address_line="22 Jorissen Street",
+        latitude=-26.1929,
+        longitude=28.0365,
+        furnished=False,
+        pets_allowed=False,
+        transport_access=True,
+    )
+
+    _property(
+        landlord=landlord,
+        title="Quiet room near Umhlanga offices",
+        description=(
+            "Quiet lock-up room in a shared home near offices, malls and transport. "
+            "Suitable for weekly commuting professionals."
+        ),
+        rent_amount=4200,
+        deposit_amount=4200,
         city="Umhlanga",
         province="KwaZulu-Natal",
-        max_rent=5000,
-        workplace_address="Gateway Theatre of Shopping, Umhlanga",
-        workplace_area="Umhlanga",
+        suburb="Umhlanga",
+        address_line="11 Park Avenue",
+        latitude=-29.7250,
+        longitude=31.0660,
+        furnished=True,
+        pets_allowed=False,
+        transport_access=True,
     )
 
-    first_property = properties[0]
-    third_property = properties[2]
+    _property(
+        landlord=landlord,
+        title="Affordable room near Phoenix taxi routes",
+        description=(
+            "Budget-friendly room with transport access into Umhlanga and Durban. "
+            "Good for shift workers and weekly commuters."
+        ),
+        rent_amount=2800,
+        deposit_amount=2800,
+        city="Durban",
+        province="KwaZulu-Natal",
+        suburb="Phoenix",
+        address_line="19 Phoenix Highway",
+        latitude=-29.7050,
+        longitude=30.9970,
+        furnished=False,
+        pets_allowed=False,
+        transport_access=True,
+    )
+
+    _taxi_rank(
+        name="Gateway / Umhlanga taxi pickup",
+        suburb="Umhlanga",
+        city="Umhlanga",
+        province="KwaZulu-Natal",
+        latitude=-29.7245,
+        longitude=31.0651,
+        notes="Demo taxi-rank record for commute testing.",
+    )
+
+    _taxi_rank(
+        name="Durban Station taxi rank",
+        suburb="CBD",
+        city="Durban",
+        province="KwaZulu-Natal",
+        latitude=-29.8519,
+        longitude=31.0256,
+        notes="Major Durban public transport interchange.",
+    )
+
+    _taxi_rank(
+        name="Sandton taxi rank",
+        suburb="Sandton",
+        city="Johannesburg",
+        province="Gauteng",
+        latitude=-26.1062,
+        longitude=28.0560,
+        notes="Demo taxi-rank record for Sandton commute testing.",
+    )
+
+    _taxi_rank(
+        name="Noord taxi rank",
+        suburb="CBD",
+        city="Johannesburg",
+        province="Gauteng",
+        latitude=-26.1980,
+        longitude=28.0462,
+        notes="Demo taxi-rank record for central Johannesburg.",
+    )
+
+    _landlord_application(
+        applicant=pending_landlord,
+        message="I own rental rooms and would like admin approval to list them on Room Near Work.",
+    )
 
     _rental_application(
-        tenant,
-        first_property,
-        tenant_subscription,
-        message="I work nearby and would like to arrange a viewing.",
-        status="pending",
+        applicant=tenant,
+        rental_property=prop1,
+        message="I am interested in this room because it is close to my workplace.",
     )
 
-    _rental_application(
-        tenant,
-        third_property,
-        tenant_subscription,
-        message="I am interested because it is close to Umhlanga offices.",
-        status="approved",
-    )
-
-    _conversation(tenant, landlord, first_property)
-    _viewing(tenant, landlord, third_property)
-
-    _review(
-        tenant,
-        landlord,
-        third_property,
-        rating=5,
-        title="Good commute and clean room",
-        comment="The room was clean, the landlord communicated well, and transport access was convenient.",
-        admin=admin,
-    )
+    landlord.landlord_approved_at = landlord.landlord_approved_at or datetime.utcnow()
+    landlord.landlord_approved_by_id = landlord.landlord_approved_by_id or admin.id
 
     db.session.commit()
