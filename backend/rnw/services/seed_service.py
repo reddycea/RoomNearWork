@@ -213,20 +213,7 @@ def _rental_application(
 
 def seed_database() -> None:
     ensure_default_plans()
-
-    admin = _user(
-        email="admin@rnw.local",
-        first_name="RNW",
-        last_name="Admin",
-        phone="+270600000001",
-        id_number="9001015000001",
-        password=DEMO_PASSWORDS["admin@rnw.local"],
-        role="admin",
-        is_admin=True,
-        can_act_as_tenant=True,
-        can_act_as_landlord=True,
-    )
-
+    
     landlord = _user(
         email="landlord@rnw.local",
         first_name="Lebo",
@@ -395,6 +382,6 @@ def seed_database() -> None:
     )
 
     landlord.landlord_approved_at = landlord.landlord_approved_at or datetime.utcnow()
-    landlord.landlord_approved_by_id = landlord.landlord_approved_by_id or admin.id
+    landlord.landlord_approved_by_id = None
 
     db.session.commit()
