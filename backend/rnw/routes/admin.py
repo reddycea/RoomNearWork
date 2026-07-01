@@ -4,7 +4,7 @@ from datetime import datetime
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from ..models import (BillingInvoice, LandlordApplication, LandlordVerification, ListingReport, PaymentWebhookLog, Property, PropertyReview, RentalApplication, SubscriptionPlan, SupportTicket, User, UserSubscription,)
+from ..models import (Invoice, LandlordApplication, LandlordVerification, ListingReport, PaymentWebhookLog, Property, RentalReview, RentalApplication, SubscriptionPlan, SupportTicket, User, UserSubscription,)
 from backend.rnw.services.audit_service import log_action
 from backend.rnw.utils.decorators import admin_required, two_factor_required
 from backend.rnw.utils.security import clean_user_text
