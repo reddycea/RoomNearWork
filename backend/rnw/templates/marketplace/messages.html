@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<section class='dashboard'><h1>Messages</h1><div class='panel list'>{% for t in threads %}<a href='{{ url_for('marketplace.thread', thread_id=t.id) }}'><strong>{{ t.property.title }}</strong><span>{{ t.status }}</span></a>{% else %}<p>No conversations yet.</p>{% endfor %}</div></section>{% endblock %}
