@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+
+{% block title %}My profile — Room Near Work{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+  <h1>My profile</h1>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h2>Profile details</h2>
+
+      <form method="post" action="{{ url_for('profile.index') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+          <label for="full_name">Full name</label>
+          <input
+            id="full_name"
+            name="full_name"
+            class="form-control"
+            value="{{ current_user.full_name }}"
+            required
+          >
+        </div>
+
+        <div class="mb-3">
+          <label for="email">Email</label>
+          <input
+            id="email"
+            class="form-control"
+            value="{{ current_user.email }}"
+            disabled
+          >
+        </div>
+
+        <div class="mb-3">
+          <label for="phone">Phone number</label>
+          <input
+            id="phone"
+            name="phone"
+            class="form-control"
+            value="{{ current_user.phone or '' }}"
+            placeholder="+27..."
+          >
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save profile</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h2>Change password</h2>
+
+      <form method="post" action="{{ url_for('profile.change_password') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+          <label for="current_password">Current password</label>
+          <input
+            id="current_password"
+            name="current_password"
+            type="password"
+            class="form-control"
+            required
+          >
+        </div>
+
+        <div class="mb-3">
+          <label for="new_password">New password</label>
+          <input
+            id="new_password"
+            name="new_password"
+            type="password"
+            class="form-control"
+            required
+          >
+        </div>
+
+        <div class="mb-3">
+          <label for="confirm_password">Confirm new password</label>
+          <input
+            id="confirm_password"
+            name="confirm_password"
+            type="password"
+            class="form-control"
+            required
+          >
+        </div>
+
+        <button type="submit" class="btn btn-warning">Change password</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h2>Role</h2>
+
+      <p>
+        Current role:
+        <strong>{{ current_user.role|title }}</strong>
+      </p>
+
+      {% if current_user.can_act_as_tenant %}
+        <form method="post" action="{{ url_for('profile.switch_role', role='tenant') }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-primary">
+            Switch to tenant
+          </button>
+        </form>
+      {% endif %}
+
+      {% if current_user.can_act_as_landlord %}
+        <form method="post" action="{{ url_for('profile.switch_role', role='landlord') }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-success">
+            Switch to landlord
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <h2>Become a landlord</h2>
+
+      {% if current_user.can_act_as_landlord %}
+        <p class="text-success">
+          Your landlord account has been approved. You can switch to landlord mode.
+        </p>
+      {% elif pending_landlord_application %}
+        <p class="text-warning">
+          Your landlord application is pending admin approval.
+        </p>
+      {% else %}
+        {% if latest_landlord_application and latest_landlord_application.status == 'rejected' %}
+          <p class="text-danger">
+            Your previous application was rejected.
+            {% if latest_landlord_application.admin_note %}
+              Reason: {{ latest_landlord_application.admin_note }}
+            {% endif %}
+          </p>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('profile.apply_landlord') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <div class="mb-3">
+            <label for="message">Tell the admin why you want landlord access</label>
+            <textarea
+              id="message"
+              name="message"
+              class="form-control"
+              rows="4"
+              placeholder="Example: I own or manage rental rooms and want to list them on Room Near Work."
+            ></textarea>
+          </div>
+
+          <button type="submit" class="btn btn-success">
+            Apply to become a landlord
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}
