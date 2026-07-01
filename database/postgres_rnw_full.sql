@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) NOT NULL,
     full_name VARCHAR(160) NOT NULL,
+    id_number VARCHAR(13) UNIQUE,
+    reference_code VARCHAR(80),
     phone VARCHAR(40),
     password_hash VARCHAR(255) NOT NULL,
 
