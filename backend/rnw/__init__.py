@@ -89,7 +89,6 @@ def register_security(app: Flask) -> None:
 
 
 def register_blueprints(app: Flask) -> None:
-    from .routes.admin import admin_bp
     from .routes.api import api_bp
     from .routes.auth import auth_bp
     from .routes.profile import profile_bp
@@ -114,7 +113,6 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(billing_bp)
     app.register_blueprint(tenant_bp)
     app.register_blueprint(landlord_bp)
-    app.register_blueprint(admin_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(trust_bp)
     app.register_blueprint(marketplace_bp)
