@@ -1,0 +1,10 @@
+{% if current_user.is_authenticated and current_user.available_roles is defined %}
+<form method="post" action="{{ url_for('marketplace.switch_role') }}" class="role-switcher">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <select name="role" onchange="this.form.submit()" aria-label="Switch active role">
+    {% for role in current_user.available_roles() %}
+      {% if role != 'admin' %}<option value="{{ role }}" {% if current_user.role == role %}selected{% endif %}>{{ role|title }}</option>{% endif %}
+    {% endfor %}
+  </select>
+</form>
+{% endif %}
