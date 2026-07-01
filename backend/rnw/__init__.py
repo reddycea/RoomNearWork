@@ -92,6 +92,7 @@ def register_blueprints(app: Flask) -> None:
     from .routes.admin import admin_bp
     from .routes.api import api_bp
     from .routes.auth import auth_bp
+    from .routes.profile import profile_bp
     from .routes.billing import billing_bp
     from .routes.health import health_bp
     from .routes.legal import legal_bp
@@ -107,6 +108,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(health_bp)
     app.register_blueprint(legal_bp)
     app.register_blueprint(main_bp)
+    app.register_blueprint(profile_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(properties_bp)
     app.register_blueprint(billing_bp)
