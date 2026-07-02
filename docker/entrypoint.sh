@@ -1,8 +1,6 @@
 #!/usr/bin/env sh
 set -e
 
-streamlit run admin/app.py --server.port $PORT --server.address 0.0.0.0
-
 echo "Creating database tables if missing..."
 flask --app backend.app:create_app init-db
 
